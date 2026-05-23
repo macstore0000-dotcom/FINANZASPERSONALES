@@ -556,6 +556,16 @@
         
         window.addEventListener('DOMContentLoaded', () => {
             
+            function escapeHtml(unsafe) {
+                if (unsafe === null || unsafe === undefined) return '';
+                return String(unsafe)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
+
             function formatCurrency(amount) {
                 const val = parseFloat(amount);
                 if (isNaN(val)) return 'S/ 0.00';
@@ -1110,15 +1120,15 @@
                 const tableRowsHtml = allTransactions.map(t => {
                     let amountClass = 'text-gray-800';
                     let sign = '';
-                    let categoryDisplay = t.category;
-                    let subcategoryDisplay = t.subcategory;
+                    let categoryDisplay = escapeHtml(t.category);
+                    let subcategoryDisplay = escapeHtml(t.subcategory);
 
                     if (t.type === 'Ingreso') {
                         amountClass = 'text-green-600'; sign = '+';
                     } else if (t.type === 'Transferencia') {
                         amountClass = 'text-blue-600';
                         categoryDisplay = `<span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold">Transferencia</span>`;
-                        subcategoryDisplay = `${t.paymentMethod} <i data-lucide="arrow-right" class="w-3 h-3 inline"></i> ${t.destinationAccount}`;
+                        subcategoryDisplay = `${escapeHtml(t.paymentMethod)} <i data-lucide="arrow-right" class="w-3 h-3 inline"></i> ${escapeHtml(t.destinationAccount)}`;
                     } else {
                         amountClass = 'text-red-600'; sign = '-';
                     }
@@ -1127,24 +1137,28 @@
                     const formattedAmount = formatCurrency(amount);
                     const amountDisplay = t.type === 'Transferencia' ? formattedAmount : `${sign}${formattedAmount}`;
                     
+                    const safeId = escapeHtml(t.id);
+                    const safeDate = escapeHtml(t.date);
+                    const safeDetail = escapeHtml(t.detail || '');
+                    const detailDisplay = safeDetail || 'Sin detalle';
                     return `
                         <tr class="bg-white border-b hover:bg-gray-50">
-                            <td class="px-6 py-4 whitespace-nowrap">${t.date}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">${safeDate}</td>
                             <td class="px-6 py-4">${categoryDisplay}</td>
                             <td class="px-6 py-4">${subcategoryDisplay}</td>
                             <td class="px-6 py-4">
                                 <div class="flex items-center gap-2">
-                                    <span class="detail-display cursor-pointer hover:bg-yellow-100 p-1 rounded transition-colors" onclick="window.enableEdit(this)">${t.detail || 'Sin detalle'}</span>
+                                    <span class="detail-display cursor-pointer hover:bg-yellow-100 p-1 rounded transition-colors" onclick="window.enableEdit(this)">${detailDisplay}</span>
                                     <div class="edit-controls hidden flex gap-1">
-                                        <input class="border border-indigo-300 rounded px-2 py-1 text-sm text-gray-800" value="${t.detail || ''}" onkeydown="if(event.key === 'Enter') window.saveDetail('${t.id}', this); else if(event.key === 'Escape') window.cancelEdit(this.nextElementSibling)">
-                                        <button onclick="window.saveDetail('${t.id}', this)" class="text-green-600 hover:text-green-800 p-1"><i data-lucide="check" class="w-4 h-4"></i></button>
+                                        <input class="border border-indigo-300 rounded px-2 py-1 text-sm text-gray-800" value="${safeDetail}" onkeydown="if(event.key === 'Enter') window.saveDetail('${safeId}', this); else if(event.key === 'Escape') window.cancelEdit(this.nextElementSibling)">
+                                        <button onclick="window.saveDetail('${safeId}', this)" class="text-green-600 hover:text-green-800 p-1"><i data-lucide="check" class="w-4 h-4"></i></button>
                                         <button onclick="window.cancelEdit(this)" class="text-gray-400 hover:text-gray-600 p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
                                     </div>
                                 </div>
                             </td>
                             <td class="px-6 py-4 text-right font-bold ${amountClass} whitespace-nowrap">${amountDisplay}</td>
                             <td class="px-6 py-4 text-center">
-                                <button onclick="window.deleteTx('${t.id}')" class="px-2 py-1 text-xs font-medium text-red-600 bg-red-100 rounded-md hover:bg-red-200 transition-colors">
+                                <button onclick="window.deleteTx('${safeId}')" class="px-2 py-1 text-xs font-medium text-red-600 bg-red-100 rounded-md hover:bg-red-200 transition-colors">
                                     Eliminar
                                 </button>
                             </td>
