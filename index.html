@@ -946,7 +946,7 @@
                 } else {
                     const userEmail = currentUser.displayEmail || currentUser.email || 'admin@admin.com';
                     await setDoc(userDocRef, { email: userEmail, role: 'user', status: 'active', txCount: 0 });
-                    currentUserRole = 'admin';
+                    currentUserRole = 'user';
                 }
             }
             
