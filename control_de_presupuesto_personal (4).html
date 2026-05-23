@@ -1,0 +1,2277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Presupuesto Personal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/lucide.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'primary': '#4f46e5',
+              'secondary': '#10b981',
+              'accent': '#f97316',
+              'background': '#f1f5f9',
+              'card': '#ffffff',
+              'text-primary': '#1e293b',
+              'text-secondary': '#64748b',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .dashboard-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: all 0.3s ease;
+        }
+        .dashboard-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 50;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 90%;
+            max-width: 500px;
+            border-radius: 0.5rem;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .tab-button.active {
+            border-color: #4f46e5;
+            color: #4f46e5;
+            background-color: #eef2ff;
+        }
+    </style>
+</head>
+<body class="bg-background text-text-primary">
+
+    <div id="login-view" class="flex items-center justify-center min-h-screen">
+        <div class="w-full max-w-md p-8 space-y-6 bg-card rounded-xl shadow-lg text-center">
+            <div class="inline-block bg-primary/10 p-4 rounded-full">
+                 <i data-lucide="piggy-bank" class="w-16 h-16 text-primary"></i>
+            </div>
+            <h2 class="text-3xl font-bold text-primary">Organizador de Finanzas Personales</h2>
+            <p class="text-text-secondary">Inicia sesión para continuar</p>
+            <form id="login-form" class="space-y-6 text-left">
+                <div>
+                    <label for="email" class="text-sm font-medium text-text-secondary">Correo Electrónico</label>
+                    <input id="email" name="email" type="email" required class="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary" placeholder="tu@correo.com">
+                </div>
+                <div>
+                    <label for="password" class="text-sm font-medium text-text-secondary">Contraseña</label>
+                    <input id="password" name="password" type="password" required class="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary" placeholder="********">
+                </div>
+                 <p id="login-error" class="text-sm text-red-600 hidden"></p>
+                <button type="submit" id="login-btn" class="w-full py-2 px-4 text-white font-medium bg-primary rounded-md hover:bg-primary/90 focus:outline-none transition-colors">
+                    Ingresar
+                </button>
+            </form>
+
+            <div class="pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-text-secondary">
+                <span>Estado del Sistema</span>
+                <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full font-bold flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 bg-green-500 rounded-full inline-block animate-pulse"></span>
+                    V21.05.2026.3 - Stable
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-view" class="hidden">
+        <header class="bg-card shadow-md p-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-primary">Mi Presupuesto</h1>
+            <div class="flex items-center gap-4">
+                <span id="current-datetime" class="text-sm text-text-secondary hidden md:block"></span>
+                <span id="user-email" class="text-text-secondary"></span>
+                <button id="change-password-btn" class="px-4 py-2 text-sm text-primary bg-primary/10 rounded-md hover:bg-primary/20 transition-colors">Cambiar Contraseña</button>
+                <button id="logout-button" class="px-4 py-2 text-sm text-white bg-accent rounded-md hover:bg-accent/90 transition-colors">Cerrar Sesión</button>
+            </div>
+        </header>
+
+        <main class="p-4 md:p-8">
+            <div class="mb-6 border-b border-gray-200 overflow-x-auto">
+                <nav class="-mb-px flex space-x-4 min-w-max" aria-label="Tabs">
+                    <button class="tab-button active whitespace-nowrap" data-tab="register">
+                        <i data-lucide="plus-circle" class="inline-block w-5 h-5 mr-2"></i>Nuevo Registro
+                    </button>
+                    <button class="tab-button whitespace-nowrap" data-tab="accounts">
+                        <i data-lucide="wallet" class="inline-block w-5 h-5 mr-2"></i>Mis Cuentas
+                    </button>
+                    <button class="tab-button whitespace-nowrap" data-tab="transactions">
+                        <i data-lucide="list" class="inline-block w-5 h-5 mr-2"></i>Historial
+                    </button>
+                    <button class="tab-button whitespace-nowrap" data-tab="monthly">
+                        <i data-lucide="calendar" class="inline-block w-5 h-5 mr-2"></i>Dashboard Mensual
+                    </button>
+                    <button class="tab-button whitespace-nowrap" data-tab="annual">
+                        <i data-lucide="bar-chart-2" class="inline-block w-5 h-5 mr-2"></i>Dashboard Anual
+                    </button>
+                    <button class="tab-button whitespace-nowrap" data-tab="evolution">
+                        <i data-lucide="trending-up" class="inline-block w-5 h-5 mr-2"></i>Evolución Subcategoría
+                    </button>
+                    <button class="tab-button whitespace-nowrap" data-tab="custom-report">
+                        <i data-lucide="file-search" class="inline-block w-5 h-5 mr-2"></i>Reporte
+                    </button>
+                    <button class="tab-button whitespace-nowrap" data-tab="ai-analysis">
+                        <i data-lucide="sparkles" class="inline-block w-5 h-5 mr-2"></i>Análisis IA
+                    </button>
+                    <button class="tab-button whitespace-nowrap" data-tab="settings">
+                        <i data-lucide="sliders" class="inline-block w-5 h-5 mr-2"></i>Mis Ajustes
+                    </button>
+                    <button class="tab-button whitespace-nowrap" id="admin-tab-btn" data-tab="admin" style="display: none;">
+                        <i data-lucide="settings" class="inline-block w-5 h-5 mr-2"></i>Administración
+                    </button>
+                </nav>
+            </div>
+
+            <div id="register-content" class="tab-content">
+                <div class="max-w-2xl mx-auto dashboard-card">
+                    <h2 class="text-2xl font-bold mb-6 text-primary border-b pb-4 flex items-center gap-2">
+                        <i data-lucide="pen-tool" class="w-6 h-6"></i> Registrar Transacción
+                    </h2>
+                    <form id="transaction-form">
+                        <div class="space-y-5">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="trans-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo Principal</label>
+                                    <select id="trans-type" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"></select>
+                                </div>
+                                <div>
+                                    <label for="trans-date" class="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                                    <input type="date" id="trans-date" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary">
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="category-container">
+                                <div>
+                                    <label for="trans-category" class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                                    <select id="trans-category" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"></select>
+                                </div>
+                                 <div>
+                                    <label for="trans-subcategory" class="block text-sm font-medium text-gray-700 mb-1">Subcategoría</label>
+                                    <select id="trans-subcategory" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"></select>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="trans-amount" class="block text-sm font-medium text-gray-700 mb-1">Monto (S/)</label>
+                                    <input type="number" id="trans-amount" step="0.01" min="0.01" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary" placeholder="0.00">
+                                </div>
+                                <div id="payment-origin-container">
+                                    <label for="trans-payment" id="label-trans-payment" class="block text-sm font-medium text-gray-700 mb-1">Cuenta / Medio de Pago</label>
+                                    <select id="trans-payment" required class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"></select>
+                                </div>
+                                <div id="payment-dest-container" class="hidden">
+                                    <label for="trans-dest-account" class="block text-sm font-medium text-gray-700 mb-1">Cuenta de Destino</label>
+                                    <select id="trans-dest-account" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"></select>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label for="trans-detail" class="block text-sm font-medium text-gray-700 mb-1">Detalle (Opcional)</label>
+                                <textarea id="trans-detail" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary" placeholder="Ej: Compra de supermercado semanal o Traspaso"></textarea>
+                            </div>
+                            
+                            <div class="pt-4">
+                                <button id="save-transaction-btn" type="submit" class="w-full py-3 px-4 text-white font-bold bg-secondary rounded-md hover:bg-secondary/90 transition-colors disabled:bg-gray-400 flex items-center justify-center gap-2">
+                                    <i data-lucide="save" class="w-5 h-5"></i>
+                                    Guardar Transacción
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div id="accounts-content" class="tab-content hidden">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-primary flex items-center gap-2"><i data-lucide="wallet"></i> Patrimonio y Cuentas</h2>
+                    <button id="open-balances-modal-btn" class="flex items-center gap-2 px-4 py-2 text-white bg-indigo-600 rounded-md hover:bg-indigo-700 transition-colors shadow-sm">
+                        <i data-lucide="settings-2" class="w-4 h-4"></i> Establecer Saldos Iniciales
+                    </button>
+                </div>
+
+                <div class="dashboard-card mb-8 text-center bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+                    <h3 class="text-indigo-100 mb-2 font-medium">Patrimonio Neto Total</h3>
+                    <p id="net-worth-total" class="text-5xl font-bold">S/ 0.00</p>
+                    <div class="flex justify-center gap-8 mt-4 text-sm text-indigo-50">
+                        <div>Activos: <span id="net-assets" class="font-bold">S/ 0.00</span></div>
+                        <div>Deudas/Tarjetas: <span id="net-liabilities" class="font-bold">S/ 0.00</span></div>
+                    </div>
+                </div>
+
+                <div id="accounts-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    </div>
+            </div>
+
+            <div id="transactions-content" class="tab-content hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-primary">Historial de Transacciones</h2>
+                    <button id="export-csv-btn" class="flex items-center gap-2 px-4 py-2 text-primary bg-primary/10 rounded-md hover:bg-primary/20 transition-colors">
+                        <i data-lucide="download" class="w-5 h-5"></i>
+                        Exportar CSV
+                    </button>
+                </div>
+                <div class="bg-card p-4 rounded-lg shadow-sm overflow-x-auto">
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3">Fecha</th>
+                                <th scope="col" class="px-6 py-3">Categoría</th>
+                                <th scope="col" class="px-6 py-3">Subcategoría / Cuentas</th>
+                                <th scope="col" class="px-6 py-3">Detalle (Click para editar)</th>
+                                <th scope="col" class="px-6 py-3 text-right">Monto</th>
+                                <th scope="col" class="px-6 py-3 text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactions-table-body">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="monthly-content" class="tab-content hidden">
+                <div class="bg-card p-4 rounded-lg mb-6 flex items-center gap-4">
+                    <label for="month-selector" class="font-semibold">Seleccionar Mes:</label>
+                    <input type="month" id="month-selector" class="border border-gray-300 rounded-md p-2">
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="dashboard-card"><h3 class="text-text-secondary">Ingresos Totales</h3><p id="monthly-income" class="text-3xl font-bold text-secondary"></p></div>
+                    <div class="dashboard-card"><h3 class="text-text-secondary">Gastos Totales</h3><p id="monthly-expense" class="text-3xl font-bold text-accent"></p></div>
+                    <div class="dashboard-card"><h3 class="text-text-secondary">Ahorro del Mes</h3><p id="monthly-savings" class="text-3xl font-bold text-primary"></p></div>
+                    <div class="dashboard-card"><h3 class="text-text-secondary">Tasa de Ahorro</h3><p id="monthly-savings-rate" class="text-3xl font-bold text-primary"></p></div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="dashboard-card"><h3 class="text-lg font-semibold mb-4">Gastos por Subcategoría</h3><div class="relative h-72"><canvas id="monthly-expenses-chart"></canvas></div></div>
+                    <div class="dashboard-card"><h3 class="text-lg font-semibold mb-4">Fuentes de Ingreso</h3><div class="relative h-72"><canvas id="monthly-income-chart"></canvas></div></div>
+                    <div class="dashboard-card"><h3 class="text-lg font-semibold mb-4">Composición de Gastos</h3><div class="relative h-64 flex justify-center"><canvas id="monthly-composition-chart"></canvas></div></div>
+                    <div class="dashboard-card"><h3 class="text-lg font-semibold mb-4">Gastos por Medio de Pago</h3><div class="relative h-64 flex justify-center"><canvas id="monthly-payment-chart"></canvas></div></div>
+                    <div id="expense-breakdown-container" class="contents"></div>
+                </div>
+            </div>
+            
+            <div id="annual-content" class="tab-content hidden">
+                 <div class="bg-card p-4 rounded-lg mb-6 flex items-center gap-4">
+                    <label for="year-selector" class="font-semibold">Seleccionar Año:</label>
+                    <select id="year-selector" class="border border-gray-300 rounded-md p-2"></select>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="dashboard-card"><h3 class="text-text-secondary">Ingresos Totales</h3><p id="annual-income" class="text-3xl font-bold text-secondary"></p></div>
+                    <div class="dashboard-card"><h3 class="text-text-secondary">Gastos Totales</h3><p id="annual-expense" class="text-3xl font-bold text-accent"></p></div>
+                    <div class="dashboard-card"><h3 class="text-text-secondary">Ahorro Total</h3><p id="annual-savings" class="text-3xl font-bold text-primary"></p></div>
+                    <div class="dashboard-card"><h3 class="text-text-secondary">Tasa de Ahorro</h3><p id="annual-savings-rate" class="text-3xl font-bold text-primary"></p></div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <div class="dashboard-card"><h3 class="text-lg font-semibold mb-4">Ingresos vs Gastos por Mes</h3><div class="relative h-80"><canvas id="annual-flow-chart"></canvas></div></div>
+                    <div class="dashboard-card"><h3 class="text-lg font-semibold mb-4">Composición Anual de Gastos</h3><div class="relative h-80 flex justify-center"><canvas id="annual-composition-chart"></canvas></div></div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="dashboard-card"><h3 class="text-lg font-semibold mb-4">Evolución de Gastos Necesarios</h3><div class="relative h-64"><canvas id="annual-necessary-chart"></canvas></div></div>
+                    <div class="dashboard-card"><h3 class="text-lg font-semibold mb-4">Evolución de Gastos Deseos</h3><div class="relative h-64"><canvas id="annual-wishes-chart"></canvas></div></div>
+                    <div class="dashboard-card"><h3 class="text-lg font-semibold mb-4">Evolución de Deudas</h3><div class="relative h-64"><canvas id="annual-debts-chart"></canvas></div></div>
+                </div>
+                <div id="annual-expense-breakdown-container" class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6"></div>
+            </div>
+
+            <div id="evolution-content" class="tab-content hidden">
+                <div class="dashboard-card max-w-4xl mx-auto">
+                    <h2 class="text-xl font-bold mb-6 text-primary flex items-center gap-2">
+                        <i data-lucide="trending-up"></i> Evolución de Gasto / Ingreso por Subcategoría
+                    </h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div>
+                            <label for="evo-subcat" class="block text-sm font-medium text-gray-700 mb-1">Seleccionar Subcategoría:</label>
+                            <select id="evo-subcat" class="w-full border border-gray-300 rounded-md p-2 bg-white focus:ring-primary focus:border-primary">
+                                <option value="">Cargando subcategorías...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="evo-year" class="block text-sm font-medium text-gray-700 mb-1">Seleccionar Año:</label>
+                            <select id="evo-year" class="w-full border border-gray-300 rounded-md p-2 bg-white focus:ring-primary focus:border-primary"></select>
+                        </div>
+                    </div>
+                    <div class="h-80 relative">
+                        <canvas id="evo-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div id="custom-report-content" class="tab-content hidden">
+                <div class="bg-card p-4 rounded-lg mb-6 flex flex-col sm:flex-row items-center gap-4">
+                    <label for="report-category" class="font-semibold whitespace-nowrap">Categoría:</label>
+                    <select id="report-category" class="border border-gray-300 rounded-md p-2 w-full sm:w-1/3 border-indigo-200">
+                        <option value="">Seleccione una categoría...</option>
+                    </select>
+                    
+                    <label for="report-subcategory" class="font-semibold whitespace-nowrap">Subcategoría:</label>
+                    <select id="report-subcategory" class="border border-gray-300 rounded-md p-2 flex-grow disabled:bg-gray-100 border-indigo-200" disabled>
+                        <option value="">Seleccione una categoría primero...</option>
+                    </select>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="dashboard-card">
+                        <h3 class="text-lg font-semibold mb-4 text-primary">Resumen por Año</h3>
+                        <div id="report-annual-summary" class="space-y-3 text-sm">Selecciona una categoría y subcategoría.</div>
+                    </div>
+                    <div class="dashboard-card">
+                        <h3 class="text-lg font-semibold mb-4 text-primary">Resumen por Mes</h3>
+                        <div id="report-monthly-summary" class="space-y-3 text-sm max-h-60 overflow-y-auto">Selecciona una categoría y subcategoría.</div>
+                    </div>
+                </div>
+
+                <div class="bg-card p-4 rounded-lg shadow-sm overflow-x-auto">
+                    <h3 class="text-lg font-semibold mb-4 text-primary">Detalle de Transacciones</h3>
+                    <table class="w-full text-sm text-left text-gray-500">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3">Fecha</th>
+                                <th scope="col" class="px-6 py-3">Categoría</th>
+                                <th scope="col" class="px-6 py-3">Detalle</th>
+                                <th scope="col" class="px-6 py-3">Medio de Pago</th>
+                                <th scope="col" class="px-6 py-3 text-right">Monto</th>
+                            </tr>
+                        </thead>
+                        <tbody id="report-table-body">
+                            <tr><td colspan="5" class="text-center py-4">Selecciona una categoría y subcategoría para ver el detalle.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="ai-analysis-content" class="tab-content hidden">
+                <div class="max-w-4xl mx-auto dashboard-card">
+                    <h2 class="text-2xl font-bold mb-6 text-primary border-b pb-4 flex items-center gap-2">
+                        <i data-lucide="brain-circuit" class="w-6 h-6"></i> Asesor Financiero IA
+                    </h2>
+                    <p class="text-text-secondary mb-6">Obtén un análisis personalizado de tus finanzas impulsado por Inteligencia Artificial. Selecciona el período que deseas evaluar.</p>
+                    
+                    <div class="flex flex-col sm:flex-row gap-4 mb-6">
+                        <select id="ai-period" class="border border-gray-300 rounded-md p-2 flex-grow focus:ring-primary focus:border-primary">
+                            <option value="current-month">Mes Actual</option>
+                            <option value="last-3-months">Últimos 3 Meses</option>
+                            <option value="last-year">Último Año</option>
+                        </select>
+                        <button id="analyze-ai-btn" class="px-6 py-2 text-white font-bold bg-primary rounded-md hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
+                            <i data-lucide="sparkles" class="w-5 h-5"></i> Analizar mis finanzas
+                        </button>
+                    </div>
+                    
+                    <div id="ai-loading" class="hidden flex-col items-center justify-center py-12">
+                        <i data-lucide="loader-2" class="w-12 h-12 animate-spin text-primary mb-4"></i>
+                        <p class="text-lg font-medium text-text-primary">Analizando tus patrones de gasto...</p>
+                        <p class="text-sm text-text-secondary">Generando recomendaciones personalizadas</p>
+                    </div>
+                    
+                    <div id="ai-result-container" class="hidden bg-gray-50 rounded-lg p-6 border border-gray-200 shadow-inner">
+                        <div id="ai-result-content" class="prose max-w-none text-text-primary">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="settings-content" class="tab-content hidden">
+                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <div class="dashboard-card">
+                        <h2 class="text-2xl font-bold mb-4 text-primary">Mis Categorías</h2>
+                        <p class="text-text-secondary mb-6">Los cambios realizados aquí <strong>solo afectarán a tu cuenta</strong>. Agrega o elimina subcategorías y luego haz clic en "Guardar Cambios".</p>
+                        <div id="master-categories-container" class="space-y-6"></div>
+                        <div class="mt-8 flex justify-end">
+                            <button id="save-master-categories-btn" class="px-6 py-2 text-white bg-primary rounded-md hover:bg-primary/90 transition-colors">Guardar Cambios</button>
+                        </div>
+                    </div>
+                     <div class="dashboard-card">
+                        <h2 class="text-2xl font-bold mb-4 text-primary">Mis Cuentas Base</h2>
+                        <p class="text-text-secondary mb-6">Administra las cuentas base de tu sistema. Las nuevas que agregues aparecerán automáticamente en tu pestaña "Mis Cuentas".</p>
+                        <div id="master-accounts-container" class="space-y-6"></div>
+                        <div class="mt-8 flex justify-end">
+                            <button id="save-master-accounts-btn" class="px-6 py-2 text-white bg-primary rounded-md hover:bg-primary/90 transition-colors">Guardar Cambios</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-card mb-8">
+                    <h2 class="text-2xl font-bold mb-4 flex items-center gap-2">
+                        <i data-lucide="shield-alert" class="w-6 h-6 text-accent"></i> Auditoría de Subcategorías
+                    </h2>
+                    <p class="text-text-secondary mb-6">Identifica rápidamente las subcategorías que tienes configuradas en tus ajustes personales pero que no has utilizado en ninguna transacción hasta el momento.</p>
+                    <button id="check-unused-subcats-btn" class="px-6 py-2 text-white font-semibold bg-accent rounded-md hover:bg-accent/90 transition-colors flex items-center gap-2">
+                        <i data-lucide="search" class="w-5 h-5"></i> Analizar Mis Subcategorías sin Uso
+                    </button>
+                    <div id="unused-subcats-results" class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+            </div>
+
+            <div id="admin-content" class="tab-content hidden">
+                <h2 class="text-2xl font-bold mb-4 text-primary">Métricas del Sistema</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="dashboard-card bg-indigo-50 border border-indigo-100">
+                        <h3 class="text-text-secondary text-sm font-bold uppercase tracking-wider mb-2 flex items-center gap-2"><i data-lucide="users"></i> Total Usuarios</h3>
+                        <p id="metric-total-users" class="text-4xl font-bold text-primary">...</p>
+                    </div>
+                    <div class="dashboard-card bg-green-50 border border-green-100">
+                        <h3 class="text-text-secondary text-sm font-bold uppercase tracking-wider mb-2 flex items-center gap-2"><i data-lucide="user-check"></i> Usuarios Activos</h3>
+                        <p id="metric-active-users" class="text-4xl font-bold text-secondary">...</p>
+                    </div>
+                    <div class="dashboard-card bg-orange-50 border border-orange-100">
+                        <h3 class="text-text-secondary text-sm font-bold uppercase tracking-wider mb-2 flex items-center gap-2"><i data-lucide="activity"></i> Transacciones Globales</h3>
+                        <p id="metric-total-txs" class="text-4xl font-bold text-accent">...</p>
+                    </div>
+                </div>
+
+                <div class="dashboard-card mb-8">
+                    <h2 class="text-2xl font-bold mb-4">Gestionar Usuarios y Accesos</h2>
+                    <p class="text-text-secondary mb-6">Administra los roles y activa o suspende instantáneamente el acceso de cada miembro al sistema.</p>
+                    <div id="user-roles-container" class="space-y-4"></div>
+                </div>
+                
+                <h2 class="text-2xl font-bold mb-4 text-primary border-t pt-8">Plantillas Globales por Defecto (Día Cero)</h2>
+                <p class="text-text-secondary mb-6">Define las categorías y las cuentas iniciales que recibirá automáticamente cualquier familiar el día que se registre por primera vez.</p>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <div class="dashboard-card border border-indigo-100 bg-white">
+                        <h3 class="text-xl font-bold mb-4 text-primary">Plantilla: Categorías</h3>
+                        <div id="global-categories-container" class="space-y-6"></div>
+                        <div class="mt-8 flex justify-end">
+                            <button id="save-global-categories-btn" class="px-6 py-2 text-white bg-primary rounded-md hover:bg-primary/90 transition-colors">Guardar Plantilla Global</button>
+                        </div>
+                    </div>
+                     <div class="dashboard-card border border-indigo-100 bg-white">
+                        <h3 class="text-xl font-bold mb-4 text-primary">Plantilla: Cuentas</h3>
+                        <div id="global-accounts-container" class="space-y-6"></div>
+                        <div class="mt-8 flex justify-end">
+                            <button id="save-global-accounts-btn" class="px-6 py-2 text-white bg-primary rounded-md hover:bg-primary/90 transition-colors">Guardar Plantilla Global</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="balances-modal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-primary">Configurar Saldos (Día Cero)</h3>
+                <button id="close-balances-modal-btn" class="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
+            </div>
+            
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4 text-sm text-blue-800 rounded">
+                <p class="mb-2"><strong>1. Efectivo y Bancos:</strong> Ingresa el dinero a favor que tienes HOY.</p>
+                <p><strong>2. Tarjetas de Crédito:</strong> <span class="font-bold text-red-600">NO ingreses tu línea de crédito.</span> Si tu tarjeta no tiene deudas hoy, ingresa <strong>0</strong>. Si actualmente ya le debes dinero al banco, ingresa tu deuda actual en <strong>negativo</strong> (ejemplo: -450.50).</p>
+            </div>
+
+            <form id="balances-form">
+                <div id="balances-inputs-container" class="space-y-4">
+                    </div>
+                <div class="mt-6 pt-4 border-t flex justify-end gap-2">
+                    <button type="button" class="px-4 py-2 bg-gray-200 rounded-md" onclick="document.getElementById('balances-modal').style.display = 'none'">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 text-white bg-primary rounded-md flex items-center gap-2"><i data-lucide="save" class="w-4 h-4"></i> Guardar Saldos</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="password-modal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">Cambiar Contraseña</h3>
+                <button id="close-password-modal-btn" class="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
+            </div>
+            <form id="password-form">
+                <div class="space-y-4">
+                    <div>
+                        <label for="new-password" class="block text-sm font-medium text-gray-700">Nueva Contraseña</label>
+                        <input type="password" id="new-password" required class="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md">
+                    </div>
+                    <div>
+                        <label for="confirm-password" class="block text-sm font-medium text-gray-700">Confirmar Nueva Contraseña</label>
+                        <input type="password" id="confirm-password" required class="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md">
+                    </div>
+                    <p id="password-error" class="text-sm text-red-600 hidden"></p>
+                    <button type="submit" class="w-full py-2 px-4 text-white bg-secondary rounded-md hover:bg-secondary/90">Actualizar Contraseña</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="alert-modal" class="modal">
+        <div class="modal-content">
+             <h3 id="alert-title" class="text-lg font-bold mb-4">Aviso</h3>
+             <p id="alert-message" class="mb-6"></p>
+             <div class="flex justify-end">
+                <button id="alert-ok-btn" class="px-4 py-2 text-white bg-primary rounded-md hover:bg-primary/90">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-modal" class="modal">
+        <div class="modal-content">
+            <h3 id="confirm-title" class="text-lg font-bold mb-4">Confirmar Acción</h3>
+            <p id="confirm-message" class="mb-6">¿Estás seguro?</p>
+            <div class="flex justify-end gap-4">
+                <button id="confirm-cancel-btn" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Cancelar</button>
+                <button id="confirm-ok-btn" class="px-4 py-2 text-white bg-red-600 rounded-md hover:bg-red-700">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        const apiKey = ""; 
+
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, getDoc, setDoc, getDocs, updateDoc, writeBatch, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        
+        window.addEventListener('load', () => { 
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+            if (typeof ChartDataLabels !== 'undefined') {
+                Chart.register(ChartDataLabels);
+            }
+        });
+        
+        window.addEventListener('DOMContentLoaded', () => {
+            
+            function formatCurrency(amount) {
+                const val = parseFloat(amount);
+                if (isNaN(val)) return 'S/ 0.00';
+                const formatted = Math.abs(val).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                return (val < 0 ? '-' : '') + 'S/ ' + formatted;
+            }
+
+            const firebaseConfig = {
+                apiKey: "AIzaSyA99tkYNYnze9kL036s9V1U0fkE7v9dFzs",
+                authDomain: "finanzaspersonales-1a966.firebaseapp.com",
+                projectId: "finanzaspersonales-1a966",
+                storageBucket: "finanzaspersonales-1a966.firebasestorage.app",
+                messagingSenderId: "636639178066",
+                appId: "1:636639178066:web:8150454bca0fbea806de8b",
+                measurementId: "G-XR7GQVG1TP"
+            };
+            
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            const db = getFirestore(app);
+            const appId = 'finanzaspersonales-1a966';
+            
+            let currentUser = null;
+            let currentUserRole = 'user';
+            let transactionsUnsubscribe = null;
+            let accountsUnsubscribe = null;
+            let allTransactions = [];
+            let userAccounts = [];
+            let chartInstances = {};
+            let dynamicChartInstances = [];
+            let annualDynamicChartInstances = []; 
+            let evoChartInstance = null;
+            let inactivityTimer;
+            let datetimeInterval = null;
+            let masterCategories = {};
+            let masterAccountsList = [];
+            let globalMasterCategories = {};
+            let globalMasterAccountsList = [];
+            let isSubmitting = false;
+            let isInitializingAccounts = false;
+
+            const loginView = document.getElementById('login-view');
+            const appView = document.getElementById('app-view');
+            const loginForm = document.getElementById('login-form');
+            const logoutButton = document.getElementById('logout-button');
+            const userEmailSpan = document.getElementById('user-email');
+            const transactionsTableBody = document.getElementById('transactions-table-body');
+            const monthSelector = document.getElementById('month-selector');
+            const yearSelector = document.getElementById('year-selector');
+            const adminTab = document.getElementById('admin-tab-btn');
+
+            // --- ESTADO DE AUTENTICACIÓN ---
+            
+            const handleLogin = async (user) => {
+                currentUser = user;
+                try {
+                    await getUserRole(user.uid);
+                } catch (error) {
+                    if (error.message === 'blocked') {
+                        await signOut(auth);
+                        setTimeout(() => {
+                            const loginError = document.getElementById('login-error');
+                            loginError.textContent = "Tu cuenta ha sido desactivada por el administrador.";
+                            loginError.classList.remove('hidden');
+                        }, 500);
+                        return;
+                    }
+                    console.error("Error al obtener rol:", error);
+                    return;
+                }
+
+                const categoriesLoaded = await loadMasterCategories();
+                const accountsLoaded = await loadMasterAccounts();
+                if (!categoriesLoaded || !accountsLoaded) { await signOut(auth); return; }
+
+                appView.style.display = 'block';
+                loginView.style.display = 'none';
+                userEmailSpan.textContent = user.displayEmail || user.email || 'usuario@anonimo.com';
+                if (currentUserRole === 'admin') adminTab.style.display = 'flex'; else adminTab.style.display = 'none';
+                
+                loadAccounts();
+                loadTransactions();
+                
+                resetInactivityTimer();
+                document.addEventListener('mousemove', resetInactivityTimer);
+                document.addEventListener('keydown', resetInactivityTimer);
+                
+                updateClock();
+                if(datetimeInterval) clearInterval(datetimeInterval);
+                datetimeInterval = setInterval(updateClock, 1000);
+                
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = (today.getMonth() + 1).toString().padStart(2, '0');
+                monthSelector.value = `${year}-${month}`;
+                populateYearSelectors();
+                yearSelector.value = year;
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            };
+
+            const handleLogout = () => {
+                if (transactionsUnsubscribe) transactionsUnsubscribe();
+                if (accountsUnsubscribe) accountsUnsubscribe();
+                if (datetimeInterval) clearInterval(datetimeInterval);
+                clearTimeout(inactivityTimer);
+                document.removeEventListener('mousemove', resetInactivityTimer);
+                document.removeEventListener('keydown', resetInactivityTimer);
+
+                currentUser = null;
+                currentUserRole = 'user';
+                allTransactions = [];
+                userAccounts = [];
+                
+                appView.style.display = 'none';
+                loginView.style.display = 'flex';
+                adminTab.style.display = 'none';
+                userEmailSpan.textContent = '';
+                document.getElementById('current-datetime').textContent = '';
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            };
+
+            onAuthStateChanged(auth, (user) => user ? handleLogin(user) : handleLogout());
+            
+            // --- CARGA Y GESTIÓN DE CUENTAS ---
+
+            function loadAccounts() {
+                if (accountsUnsubscribe) accountsUnsubscribe();
+                if (!currentUser) return;
+                
+                const accountsRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts');
+                
+                accountsUnsubscribe = onSnapshot(query(accountsRef), async (snapshot) => {
+                    if (isInitializingAccounts) return;
+                    
+                    if (snapshot.empty) {
+                        isInitializingAccounts = true;
+                        try {
+                            const batch = writeBatch(db);
+                            for (const acc of masterAccountsList) {
+                                const newDocRef = doc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts'));
+                                batch.set(newDocRef, { ...acc, initialBalance: 0, createdAt: serverTimestamp() });
+                            }
+                            await batch.commit();
+                        } finally {
+                            isInitializingAccounts = false;
+                        }
+                    } else {
+                        let currentAccounts = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                        
+                        const uniqueNames = new Set();
+                        const docsToDelete = [];
+                        const cleanAccounts = [];
+                        
+                        currentAccounts.forEach(acc => {
+                            if (!uniqueNames.has(acc.name)) {
+                                uniqueNames.add(acc.name);
+                                cleanAccounts.push(acc);
+                            } else {
+                                docsToDelete.push(acc.id);
+                            }
+                        });
+                        
+                        if (docsToDelete.length > 0) {
+                            isInitializingAccounts = true;
+                            try {
+                                const batch = writeBatch(db);
+                                docsToDelete.forEach(id => {
+                                    batch.delete(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts', id));
+                                });
+                                await batch.commit();
+                            } catch(e) {
+                                console.error("Error al limpiar duplicados:", e);
+                            } finally {
+                                isInitializingAccounts = false;
+                            }
+                            return; 
+                        }
+                        
+                        userAccounts = cleanAccounts;
+                        
+                        const existingAccountNames = userAccounts.map(a => a.name);
+                        const missingAccounts = masterAccountsList.filter(acc => !existingAccountNames.includes(acc.name));
+                        
+                        if (missingAccounts.length > 0) {
+                            isInitializingAccounts = true;
+                            try {
+                                const batch = writeBatch(db);
+                                for (const acc of missingAccounts) {
+                                    const newDocRef = doc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts'));
+                                    batch.set(newDocRef, { ...acc, initialBalance: 0, createdAt: serverTimestamp() });
+                                }
+                                await batch.commit();
+                            } finally {
+                                isInitializingAccounts = false;
+                            }
+                            return; 
+                        }
+
+                        userAccounts.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name));
+                        initTransactionForm();
+                        renderAccountsDashboard();
+                    }
+                }, (error) => {
+                    console.error("Firestore accounts snapshot error:", error);
+                });
+            }
+
+            function renderAccountsDashboard() {
+                if (!userAccounts.length) return;
+
+                const liveBalances = {};
+                userAccounts.forEach(acc => {
+                    liveBalances[acc.name] = parseFloat(acc.initialBalance || 0);
+                });
+
+                allTransactions.forEach(t => {
+                    const amount = parseFloat(t.amount);
+                    if (t.type === 'Ingreso') {
+                        if (liveBalances[t.paymentMethod] !== undefined) liveBalances[t.paymentMethod] += amount;
+                    } else if (t.type === 'Transferencia') {
+                        if (liveBalances[t.paymentMethod] !== undefined) liveBalances[t.paymentMethod] -= amount; 
+                        if (liveBalances[t.destinationAccount] !== undefined) liveBalances[t.destinationAccount] += amount; 
+                    } else { 
+                        if (liveBalances[t.paymentMethod] !== undefined) liveBalances[t.paymentMethod] -= amount;
+                    }
+                });
+
+                let totalAssets = 0;
+                let totalLiabilities = 0;
+
+                const groupedAccounts = { 'Efectivo y Billeteras': [], 'Cuentas Bancarias': [], 'Tarjetas de Crédito': [] };
+                
+                userAccounts.forEach(acc => {
+                    const bal = liveBalances[acc.name];
+                    if (acc.group) groupedAccounts[acc.group].push({ ...acc, liveBalance: bal });
+                    
+                    if (bal > 0) totalAssets += bal;
+                    if (bal < 0) totalLiabilities += bal;
+                });
+
+                const netWorth = totalAssets + totalLiabilities;
+                document.getElementById('net-worth-total').textContent = formatCurrency(netWorth);
+                document.getElementById('net-assets').textContent = formatCurrency(totalAssets);
+                document.getElementById('net-liabilities').textContent = formatCurrency(totalLiabilities);
+
+                const grid = document.getElementById('accounts-grid');
+                grid.innerHTML = '';
+
+                Object.keys(groupedAccounts).forEach(groupName => {
+                    const groupData = groupedAccounts[groupName];
+                    if(groupData.length === 0) return;
+                    
+                    const groupTotal = groupData.reduce((sum, item) => sum + item.liveBalance, 0);
+                    const colorClass = groupName.includes('Tarjetas') ? 'text-red-500' : 'text-primary';
+                    const icon = groupName.includes('Tarjetas') ? 'credit-card' : (groupName.includes('Bancarias') ? 'landmark' : 'banknote');
+
+                    let html = `
+                    <div class="dashboard-card flex flex-col h-full border-t-4 border-indigo-400">
+                        <div class="flex justify-between items-center mb-4 pb-2 border-b">
+                            <h3 class="text-lg font-bold flex items-center gap-2"><i data-lucide="${icon}" class="w-5 h-5 text-gray-400"></i> ${groupName}</h3>
+                            <span class="font-bold ${colorClass}">${formatCurrency(groupTotal)}</span>
+                        </div>
+                        <div class="space-y-3 flex-grow">
+                    `;
+                    
+                    groupData.forEach(acc => {
+                        const balColor = acc.liveBalance < 0 ? 'text-red-600' : 'text-gray-800';
+                        html += `
+                            <div class="flex justify-between items-center bg-gray-50 p-2 rounded">
+                                <span class="text-sm text-gray-600">${acc.name}</span>
+                                <span class="font-semibold ${balColor}">${formatCurrency(acc.liveBalance)}</span>
+                            </div>
+                        `;
+                    });
+
+                    html += `</div></div>`;
+                    grid.innerHTML += html;
+                });
+
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+                setupBalancesModal();
+            }
+
+            function setupBalancesModal() {
+                const modal = document.getElementById('balances-modal');
+                const btn = document.getElementById('open-balances-modal-btn');
+                const closeBtn = document.getElementById('close-balances-modal-btn');
+                const form = document.getElementById('balances-form');
+                const container = document.getElementById('balances-inputs-container');
+
+                btn.onclick = () => {
+                    container.innerHTML = '';
+                    userAccounts.forEach(acc => {
+                        container.innerHTML += `
+                            <div class="flex justify-between items-center">
+                                <label class="text-sm font-medium w-2/3">${acc.name}</label>
+                                <input type="number" step="0.01" class="border rounded p-1 w-1/3 text-right" data-id="${acc.id}" value="${parseFloat(acc.initialBalance || 0).toFixed(2)}">
+                            </div>
+                        `;
+                    });
+                    modal.style.display = 'flex';
+                };
+
+                closeBtn.onclick = () => modal.style.display = 'none';
+
+                form.onsubmit = async (e) => {
+                    e.preventDefault();
+                    if (!currentUser) return;
+                    const inputs = container.querySelectorAll('input');
+                    const btnSubmit = form.querySelector('button[type="submit"]');
+                    btnSubmit.disabled = true;
+                    btnSubmit.innerHTML = 'Guardando...';
+
+                    try {
+                        for (const input of inputs) {
+                            const id = input.getAttribute('data-id');
+                            const newVal = parseFloat(input.value || 0);
+                            await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts', id), { initialBalance: newVal });
+                        }
+                        modal.style.display = 'none';
+                        showAlert("Saldos actualizados correctamente. El Patrimonio ha sido recalculado.");
+                    } catch (error) {
+                        showAlert("Error al guardar los saldos.");
+                    } finally {
+                        btnSubmit.disabled = false;
+                        btnSubmit.innerHTML = '<i data-lucide="save" class="w-4 h-4"></i> Guardar Saldos';
+                        if (typeof lucide !== 'undefined') lucide.createIcons();
+                    }
+                };
+            }
+
+            // --- LÓGICA DE CONTROL ---
+
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = loginForm.email.value;
+                const password = loginForm.password.value;
+                const loginError = document.getElementById('login-error');
+                const submitBtn = document.getElementById('login-btn');
+                
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i data-lucide="loader" class="w-5 h-5 animate-spin mx-auto"></i>';
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+
+                try {
+                    await signInWithEmailAndPassword(auth, email, password);
+                    loginError.classList.add('hidden');
+                } catch (error) {
+                    console.error("Auth error:", error);
+                    loginError.textContent = "El correo electrónico o la contraseña son incorrectos.";
+                    loginError.classList.remove('hidden');
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = 'Ingresar';
+                }
+            });
+
+            logoutButton.addEventListener('click', () => signOut(auth));
+            monthSelector.addEventListener('change', () => updateDashboards());
+            yearSelector.addEventListener('change', () => updateDashboards());
+            
+            document.getElementById('report-category').addEventListener('change', (e) => {
+                populateReportSubcategories(e.target.value);
+                generateCustomReport(e.target.value, document.getElementById('report-subcategory').value);
+            });
+            document.getElementById('report-subcategory').addEventListener('change', (e) => {
+                generateCustomReport(document.getElementById('report-category').value, e.target.value);
+            });
+            
+            document.getElementById('analyze-ai-btn').addEventListener('click', generateAiAnalysis);
+            
+            setupTabs();
+            setupTransactionFormListeners();
+            setupExport();
+            setupPasswordModal();
+            setupAdminListeners();
+
+            async function getUserRole(uid) {
+                if (!uid) return;
+                const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'user_roles', uid);
+                const userDocSnap = await getDoc(userDocRef);
+                if (userDocSnap.exists()) {
+                    const userData = userDocSnap.data();
+                    if (userData.status === 'blocked') {
+                        throw new Error('blocked');
+                    }
+                    currentUserRole = userData.role || 'user';
+                } else {
+                    const userEmail = currentUser.displayEmail || currentUser.email || 'admin@admin.com';
+                    await setDoc(userDocRef, { email: userEmail, role: 'admin', status: 'active', txCount: 0 });
+                    currentUserRole = 'admin';
+                }
+            }
+            
+            async function loadMasterCategories() {
+                try {
+                    const personalRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'categories');
+                    const personalSnap = await getDoc(personalRef);
+                    
+                    if (personalSnap.exists()) {
+                        masterCategories = personalSnap.data().data;
+                        return true;
+                    } 
+                    
+                    const globalRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'master_categories');
+                    const globalSnap = await getDoc(globalRef);
+                    let defaultCategories = {};
+
+                    if (globalSnap.exists()) {
+                        defaultCategories = globalSnap.data().data;
+                    } else {
+                        defaultCategories = { "Ingreso": { "Ingreso Fijo": ["Sueldo Fijo"], "Ingreso Variable": ["Emprendimiento", "Cachuelos", "Préstamos"] }, "Gasto": { "Gasto Necesario": ["Mercado", "Internet", "Celular", "Transporte", "Seguro", "Cuidado personal", "Renta", "Mascota", "Salud", "Electricidad", "Comida del día", "Pensión Alimentos", "Extras - Hijos/as", "Emergencias"], "Gastos Deseos": ["Desarrollo personal", "Compras", "Ropa", "Regalos", "Suscripciones", "Viajes", "Salidas"] }, "Deuda": { "Deudas": ["Hipoteca", "Préstamo Carro", "Pago Tarjeta", "Préstamo Personal"] } };
+                    }
+                    
+                    await setDoc(personalRef, { data: defaultCategories });
+                    masterCategories = defaultCategories;
+                    return true;
+                } catch (error) { 
+                    console.error("Config load error", error);
+                    return false; 
+                }
+            }
+
+            async function loadMasterAccounts() {
+                try {
+                    const personalRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'accounts');
+                    const personalSnap = await getDoc(personalRef);
+                    
+                    if (personalSnap.exists()) {
+                        masterAccountsList = personalSnap.data().accounts;
+                        return true;
+                    } 
+                    
+                    const globalRef = doc(db, 'artifacts', appId, 'public', 'data', 'config', 'master_accounts');
+                    const globalSnap = await getDoc(globalRef);
+                    let defaultAccounts = [];
+
+                    if (globalSnap.exists()) {
+                        defaultAccounts = globalSnap.data().accounts;
+                    } else {
+                        defaultAccounts = [
+                            { name: 'Efectivo (Billetera principal)', group: 'Efectivo y Billeteras' },
+                            { name: 'Efectivo (en auto)', group: 'Efectivo y Billeteras' },
+                            { name: 'Efectivo (en Lima)', group: 'Efectivo y Billeteras' },
+                            { name: 'Efectivo (en Chimbote)', group: 'Efectivo y Billeteras' },
+                            { name: 'Yape 1 - 941339163', group: 'Efectivo y Billeteras' },
+                            { name: 'Yape 2 - 991508420', group: 'Efectivo y Billeteras' },
+                            { name: 'Lemoncash', group: 'Efectivo y Billeteras' },
+                            { name: 'BBVA-PLIN (Ahorros)', group: 'Efectivo y Billeteras' },
+                            { name: 'BCP Ahorros SUELDO', group: 'Cuentas Bancarias' },
+                            { name: 'BCP Ahorros (Fondo Emergencia)', group: 'Cuentas Bancarias' },
+                            { name: 'SIT - OH', group: 'Cuentas Bancarias' },
+                            { name: 'Tarjeta BBVA Visa', group: 'Tarjetas de Crédito' },
+                            { name: 'Tarjeta IO Visa', group: 'Tarjetas de Crédito' },
+                            { name: 'Tarjeta BCP Visa', group: 'Tarjetas de Crédito' },
+                            { name: 'Tarjeta Falabella Visa', group: 'Tarjetas de Crédito' },
+                            { name: 'Tarjeta Ripley Mastercard', group: 'Tarjetas de Crédito' },
+                            { name: 'Tarjeta SIT Visa', group: 'Tarjetas de Crédito' }
+                        ];
+                    }
+
+                    await setDoc(personalRef, { accounts: defaultAccounts });
+                    masterAccountsList = defaultAccounts;
+                    return true;
+                } catch (error) { 
+                    console.error("Accounts config load error", error);
+                    return false; 
+                }
+            }
+
+            function loadTransactions() {
+                if (transactionsUnsubscribe) transactionsUnsubscribe();
+                if (!currentUser) return;
+                
+                const transactionsRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'transactions');
+                const q = query(transactionsRef);
+                transactionsUnsubscribe = onSnapshot(q, (snapshot) => {
+                    allTransactions = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                    allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    
+                    renderTransactionsTable();
+                    updateDashboards();
+                    renderAccountsDashboard(); 
+                    updateEvolutionSelectors();
+                    renderEvolutionChart();
+                    
+                    populateReportCategories();
+                    populateReportSubcategories(document.getElementById('report-category').value);
+                    generateCustomReport(document.getElementById('report-category').value, document.getElementById('report-subcategory').value);
+                }, (error) => {
+                    console.error("Firestore transactions snapshot error:", error);
+                });
+            }
+
+            window.enableEdit = (span) => {
+                span.classList.add('hidden');
+                const editControls = span.nextElementSibling;
+                editControls.classList.remove('hidden');
+                editControls.querySelector('input').focus();
+            };
+
+            window.cancelEdit = (btn) => {
+                const editControls = btn.parentElement;
+                editControls.classList.add('hidden');
+                editControls.previousElementSibling.classList.remove('hidden');
+            };
+
+            window.saveDetail = async (id, btn) => {
+                if (!currentUser) return;
+                const inputElement = btn.tagName === 'INPUT' ? btn : btn.previousElementSibling;
+                const newDetail = inputElement.value;
+                try {
+                    await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'transactions', id), { detail: newDetail });
+                } catch (error) {
+                    showAlert("No se pudo actualizar el detalle.");
+                }
+            };
+
+            window.deleteTx = (id) => {
+                showConfirmation("¿Estás seguro de que quieres eliminar esta transacción?", async () => {
+                    if (!currentUser) return;
+                    try {
+                        await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'transactions', id));
+                        try {
+                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'user_roles', currentUser.uid), { txCount: increment(-1) }, { merge: true });
+                        } catch(e) {}
+                    } catch (error) {
+                        showAlert("Error al eliminar la transacción.");
+                    }
+                });
+            };
+
+            window.deleteAccount = (id, name) => {
+                showConfirmation(`¿Estás seguro de que deseas eliminar la cuenta "${name}"? Esta acción no se puede deshacer.`, async () => {
+                    if (!currentUser) return;
+                    try {
+                        await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts', id));
+                        showAlert(`Cuenta "${name}" eliminada exitosamente.`);
+                    } catch (error) {
+                        showAlert("Error al eliminar la cuenta.");
+                    }
+                });
+            };
+
+            // --- RENDERIZADO TABLAS ---
+            
+            function renderTransactionsTable() {
+                if (allTransactions.length === 0) {
+                    transactionsTableBody.innerHTML = `<tr><td colspan="6" class="text-center py-4">No hay transacciones registradas.</td></tr>`;
+                    return;
+                }
+                const tableRowsHtml = allTransactions.map(t => {
+                    let amountClass = 'text-gray-800';
+                    let sign = '';
+                    let categoryDisplay = t.category;
+                    let subcategoryDisplay = t.subcategory;
+
+                    if (t.type === 'Ingreso') {
+                        amountClass = 'text-green-600'; sign = '+';
+                    } else if (t.type === 'Transferencia') {
+                        amountClass = 'text-blue-600';
+                        categoryDisplay = `<span class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold">Transferencia</span>`;
+                        subcategoryDisplay = `${t.paymentMethod} <i data-lucide="arrow-right" class="w-3 h-3 inline"></i> ${t.destinationAccount}`;
+                    } else {
+                        amountClass = 'text-red-600'; sign = '-';
+                    }
+
+                    const amount = parseFloat(t.amount);
+                    const formattedAmount = formatCurrency(amount);
+                    const amountDisplay = t.type === 'Transferencia' ? formattedAmount : `${sign}${formattedAmount}`;
+                    
+                    return `
+                        <tr class="bg-white border-b hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap">${t.date}</td>
+                            <td class="px-6 py-4">${categoryDisplay}</td>
+                            <td class="px-6 py-4">${subcategoryDisplay}</td>
+                            <td class="px-6 py-4">
+                                <div class="flex items-center gap-2">
+                                    <span class="detail-display cursor-pointer hover:bg-yellow-100 p-1 rounded transition-colors" onclick="window.enableEdit(this)">${t.detail || 'Sin detalle'}</span>
+                                    <div class="edit-controls hidden flex gap-1">
+                                        <input class="border border-indigo-300 rounded px-2 py-1 text-sm text-gray-800" value="${t.detail || ''}" onkeydown="if(event.key === 'Enter') window.saveDetail('${t.id}', this); else if(event.key === 'Escape') window.cancelEdit(this.nextElementSibling)">
+                                        <button onclick="window.saveDetail('${t.id}', this)" class="text-green-600 hover:text-green-800 p-1"><i data-lucide="check" class="w-4 h-4"></i></button>
+                                        <button onclick="window.cancelEdit(this)" class="text-gray-400 hover:text-gray-600 p-1"><i data-lucide="x" class="w-4 h-4"></i></button>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 text-right font-bold ${amountClass} whitespace-nowrap">${amountDisplay}</td>
+                            <td class="px-6 py-4 text-center">
+                                <button onclick="window.deleteTx('${t.id}')" class="px-2 py-1 text-xs font-medium text-red-600 bg-red-100 rounded-md hover:bg-red-200 transition-colors">
+                                    Eliminar
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+                transactionsTableBody.innerHTML = tableRowsHtml;
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+            }
+
+            function updateDashboards() {
+                updateMonthlyDashboard();
+                updateAnnualDashboard();
+            }
+
+            function updateMonthlyDashboard() {
+                const selectedMonth = monthSelector.value;
+                const monthlyTransactions = allTransactions.filter(t => t.date && t.date.startsWith(selectedMonth));
+                
+                const income = monthlyTransactions.filter(t => t.type === 'Ingreso').reduce((sum, t) => sum + parseFloat(t.amount), 0);
+                const expense = monthlyTransactions.filter(t => t.type !== 'Ingreso' && t.type !== 'Transferencia').reduce((sum, t) => sum + parseFloat(t.amount), 0);
+                const savings = income - expense;
+                const savingsRate = income > 0 ? ((savings / income) * 100).toFixed(1) : 0;
+                
+                document.getElementById('monthly-income').textContent = formatCurrency(income);
+                document.getElementById('monthly-expense').textContent = formatCurrency(expense);
+                document.getElementById('monthly-savings').textContent = formatCurrency(savings);
+                document.getElementById('monthly-savings-rate').textContent = `${savingsRate}%`;
+                
+                generateMonthlyExpensesChart(monthlyTransactions);
+                generateMonthlyIncomeChart(monthlyTransactions);
+                generateMonthlyCompositionChart(monthlyTransactions);
+                generateMonthlyPaymentChart(monthlyTransactions);
+                generateBreakdownCharts(monthlyTransactions);
+            }
+
+            // --- GRÁFICOS ---
+
+            function renderChart(canvasId, type, data, options) {
+                if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+                const ctx = document.getElementById(canvasId).getContext('2d');
+                chartInstances[canvasId] = new Chart(ctx, { type, data, options });
+            }
+            
+            function generateMonthlyExpensesChart(transactions) {
+                const grouped = transactions.filter(t => t.type !== 'Ingreso' && t.type !== 'Transferencia').reduce((acc, t) => {
+                    acc[t.subcategory] = (acc[t.subcategory] || 0) + parseFloat(t.amount);
+                    return acc;
+                }, {});
+
+                const sortedEntries = Object.entries(grouped).sort((a, b) => b[1] - a[1]);
+                renderChart('monthly-expenses-chart', 'bar', {
+                    labels: sortedEntries.map(e => e[0]),
+                    datasets: [{ label: 'Gastos', data: sortedEntries.map(e => e[1]), backgroundColor: '#fb923c' }]
+                }, {
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    plugins: { datalabels: { anchor: 'end', align: 'end', color: '#555', formatter: function(value) { return formatCurrency(value); } } },
+                    layout: { padding: { right: 50 } }
+                });
+            }
+
+            function generateMonthlyIncomeChart(transactions) {
+                const grouped = transactions.filter(t => t.type === 'Ingreso').reduce((acc, t) => { acc[t.subcategory] = (acc[t.subcategory] || 0) + parseFloat(t.amount); return acc; }, {});
+                renderChart('monthly-income-chart', 'bar', { 
+                    labels: Object.keys(grouped), datasets: [{ label: 'Ingresos', data: Object.values(grouped), backgroundColor: '#34d399' }] 
+                }, { 
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { datalabels: { anchor: 'end', align: 'top', color: '#555', formatter: function(value) { return formatCurrency(value); } } },
+                    layout: { padding: { top: 30 } }
+                });
+            }
+
+            function generateMonthlyCompositionChart(transactions) {
+                const grouped = transactions.filter(t => t.type !== 'Ingreso' && t.type !== 'Transferencia').reduce((acc, t) => { acc[t.category] = (acc[t.category] || 0) + parseFloat(t.amount); return acc; }, {});
+                const categoryColors = { 'Gasto Necesario': '#f87171', 'Gastos Deseos': '#fbbf24', 'Deudas': '#a78bfa' };
+                const labels = Object.keys(grouped);
+                const bgColors = labels.map(label => categoryColors[label] || '#94a3b8');
+
+                renderChart('monthly-composition-chart', 'doughnut', { 
+                    labels: labels, datasets: [{ data: Object.values(grouped), backgroundColor: bgColors }] 
+                }, { 
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { datalabels: { color: '#fff', font: { weight: 'bold' }, formatter: function(value) { return formatCurrency(value); } } }
+                });
+            }
+
+            function generateAnnualCategoryTrendChart(transactions, categoryFilter, canvasId, color) {
+                const monthlyData = Array(12).fill(0);
+                transactions.filter(t => t.category === categoryFilter && t.type !== 'Transferencia').forEach(t => {
+                    const monthIndex = parseInt(t.date.substring(5, 7), 10) - 1;
+                    if (monthIndex >= 0 && monthIndex < 12) monthlyData[monthIndex] += parseFloat(t.amount);
+                });
+
+                renderChart(canvasId, 'line', {
+                    labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
+                    datasets: [{ label: categoryFilter, data: monthlyData, borderColor: color, backgroundColor: color + '33', borderWidth: 2, fill: true, tension: 0.4, pointBackgroundColor: color }]
+                }, {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, ticks: { callback: function(value) { return formatCurrency(value); } } } },
+                    plugins: { datalabels: { display: false } }
+                });
+            }
+
+            function generateMonthlyPaymentChart(transactions) {
+                const grouped = transactions.filter(t => t.type !== 'Ingreso' && t.type !== 'Transferencia').reduce((acc, t) => {
+                    const method = t.paymentMethod || 'No especificado';
+                    acc[method] = (acc[method] || 0) + parseFloat(t.amount);
+                    return acc;
+                }, {});
+                
+                const dynamicColors = ['#3b82f6', '#0ea5e9', '#10b981', '#ec4899', '#6366f1', '#f43f5e', '#8b5cf6', '#14b8a6'];
+                const labels = Object.keys(grouped);
+                const bgColors = labels.map((_, i) => dynamicColors[i % dynamicColors.length]);
+                
+                renderChart('monthly-payment-chart', 'pie', {
+                    labels: labels, datasets: [{ data: Object.values(grouped), backgroundColor: bgColors }]
+                }, {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { datalabels: { color: '#fff', font: { weight: 'bold' }, formatter: function(value) { return formatCurrency(value); } } }
+                });
+            }
+
+            function generateBreakdownCharts(transactions) {
+                const container = document.getElementById('expense-breakdown-container');
+                container.innerHTML = '';
+                dynamicChartInstances.forEach(chart => chart.destroy());
+                dynamicChartInstances = [];
+
+                const expenseTxs = transactions.filter(t => t.type !== 'Ingreso' && t.type !== 'Transferencia');
+                const categories = ['Gasto Necesario', 'Gastos Deseos', 'Deudas'];
+                const categoryColors = { 'Gasto Necesario': '#f87171', 'Gastos Deseos': '#fbbf24', 'Deudas': '#a78bfa' };
+
+                categories.forEach((category, index) => {
+                    const catTxs = expenseTxs.filter(t => t.category === category);
+                    const subcatGrouped = catTxs.reduce((acc, t) => {
+                        acc[t.subcategory] = (acc[t.subcategory] || 0) + parseFloat(t.amount); return acc;
+                    }, {});
+
+                    const sortedEntries = Object.entries(subcatGrouped).sort((a, b) => b[1] - a[1]);
+                    if (sortedEntries.length > 0) {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'dashboard-card';
+                        wrapper.innerHTML = `<h3 class="text-lg font-semibold mb-4 text-left">${category}</h3><div class="relative h-64"><canvas id="breakdown-chart-${index}"></canvas></div>`;
+                        container.appendChild(wrapper);
+
+                        const chart = new Chart(document.getElementById(`breakdown-chart-${index}`).getContext('2d'), {
+                            type: 'bar',
+                            data: { labels: sortedEntries.map(e=>e[0]), datasets: [{ label: category, data: sortedEntries.map(e=>e[1]), backgroundColor: categoryColors[category], borderRadius: 4 }] },
+                            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'end', color: '#555', formatter: function(v) { return formatCurrency(v); } } }, layout: { padding: { right: 60 } } }
+                        });
+                        dynamicChartInstances.push(chart);
+                    }
+                });
+            }
+
+            function generateAnnualBreakdownCharts(transactions) {
+                const container = document.getElementById('annual-expense-breakdown-container');
+                container.innerHTML = '';
+                annualDynamicChartInstances.forEach(chart => chart.destroy());
+                annualDynamicChartInstances = [];
+
+                const expenseTxs = transactions.filter(t => t.type !== 'Ingreso' && t.type !== 'Transferencia');
+                const targetCategories = ['Gasto Necesario', 'Gastos Deseos', 'Deudas'];
+                const categoryColors = { 'Gasto Necesario': '#f87171', 'Gastos Deseos': '#fbbf24', 'Deudas': '#a78bfa' };
+
+                targetCategories.forEach((category, index) => {
+                    const catTxs = expenseTxs.filter(t => t.category === category);
+                    const subcatGrouped = catTxs.reduce((acc, t) => { acc[t.subcategory] = (acc[t.subcategory] || 0) + parseFloat(t.amount); return acc; }, {});
+
+                    const sortedEntries = Object.entries(subcatGrouped).sort((a, b) => b[1] - a[1]);
+                    if (sortedEntries.length > 0) {
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'dashboard-card';
+                        wrapper.innerHTML = `<h3 class="text-lg font-semibold mb-4 text-left">Subcategorías: ${category}</h3><div class="relative h-64"><canvas id="annual-breakdown-chart-${index}"></canvas></div>`;
+                        container.appendChild(wrapper);
+
+                        const chart = new Chart(document.getElementById(`annual-breakdown-chart-${index}`).getContext('2d'), {
+                            type: 'bar',
+                            data: { labels: sortedEntries.map(e=>e[0]), datasets: [{ label: category, data: sortedEntries.map(e=>e[1]), backgroundColor: categoryColors[category] || '#94a3b8', borderRadius: 4 }] },
+                            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { beginAtZero: true }, y: { grid: { display: false } } }, plugins: { legend: { display: false }, datalabels: { anchor: 'end', align: 'end', color: '#555', formatter: function(v) { return formatCurrency(v); } } }, layout: { padding: { right: 60 } } }
+                        });
+                        annualDynamicChartInstances.push(chart);
+                    }
+                });
+            }
+
+            function generateAnnualFlowChart(transactions) {
+                const monthlyIncome = Array(12).fill(0), monthlyExpense = Array(12).fill(0);
+
+                transactions.forEach(t => {
+                    const monthIndex = parseInt(t.date.substring(5, 7), 10) - 1;
+                    if (monthIndex >= 0 && monthIndex < 12) {
+                        const amount = parseFloat(t.amount);
+                        if (t.type === 'Ingreso') monthlyIncome[monthIndex] += amount;
+                        else if (t.type !== 'Transferencia') monthlyExpense[monthIndex] += amount;
+                    }
+                });
+
+                renderChart('annual-flow-chart', 'bar', {
+                    labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
+                    datasets: [ { label: 'Ingresos', data: monthlyIncome, backgroundColor: '#34d399' }, { label: 'Gastos', data: monthlyExpense, backgroundColor: '#f87171' } ]
+                }, {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true } }, plugins: { datalabels: { display: false } }
+                });
+            }
+
+            function generateAnnualCompositionChart(transactions) {
+                const grouped = transactions.filter(t => t.type !== 'Ingreso' && t.type !== 'Transferencia').reduce((acc, t) => {
+                    acc[t.category] = (acc[t.category] || 0) + parseFloat(t.amount); return acc;
+                }, {});
+
+                const categoryColors = { 'Gasto Necesario': '#f87171', 'Gastos Deseos': '#fbbf24', 'Deudas': '#a78bfa' };
+                const labels = Object.keys(grouped);
+                const bgColors = labels.map(label => categoryColors[label] || '#94a3b8');
+
+                renderChart('annual-composition-chart', 'pie', {
+                    labels: labels, datasets: [{ data: Object.values(grouped), backgroundColor: bgColors }]
+                }, {
+                    responsive: true, maintainAspectRatio: false, plugins: { datalabels: { color: '#fff', font: { weight: 'bold' }, formatter: function(value) { return formatCurrency(value); } } }
+                });
+            }
+
+            function updateAnnualDashboard() {
+                const year = yearSelector.value;
+                const annualTransactions = allTransactions.filter(t => t.date && t.date.startsWith(year));
+                
+                const income = annualTransactions.filter(t => t.type === 'Ingreso').reduce((sum, t) => sum + parseFloat(t.amount), 0);
+                const expense = annualTransactions.filter(t => t.type !== 'Ingreso' && t.type !== 'Transferencia').reduce((sum, t) => sum + parseFloat(t.amount), 0);
+                const savings = income - expense;
+                const savingsRate = income > 0 ? ((savings / income) * 100).toFixed(1) : 0;
+                
+                document.getElementById('annual-income').textContent = formatCurrency(income);
+                document.getElementById('annual-expense').textContent = formatCurrency(expense);
+                document.getElementById('annual-savings').textContent = formatCurrency(savings);
+                document.getElementById('annual-savings-rate').textContent = `${savingsRate}%`;
+                
+                generateAnnualFlowChart(annualTransactions);
+                generateAnnualCompositionChart(annualTransactions);
+                generateAnnualCategoryTrendChart(annualTransactions, 'Gasto Necesario', 'annual-necessary-chart', '#f87171');
+                generateAnnualCategoryTrendChart(annualTransactions, 'Gastos Deseos', 'annual-wishes-chart', '#fbbf24');
+                generateAnnualCategoryTrendChart(annualTransactions, 'Deudas', 'annual-debts-chart', '#a78bfa');
+                generateAnnualBreakdownCharts(annualTransactions); 
+            }
+
+            function populateYearSelectors() {
+                const currentYear = new Date().getFullYear();
+                const selectors = [yearSelector, document.getElementById('evo-year')];
+                selectors.forEach(select => {
+                    if (select) {
+                        select.innerHTML = '';
+                        for (let i = currentYear; i >= currentYear - 5; i--) {
+                            const option = document.createElement('option');
+                            option.value = i;
+                            option.textContent = i;
+                            select.appendChild(option);
+                        }
+                    }
+                });
+            }
+
+            // --- LÓGICA DE EVOLUCIÓN ---
+            function updateEvolutionSelectors() {
+                const subcatSelect = document.getElementById('evo-subcat');
+                const previousSelection = subcatSelect.value;
+                const subcats = [...new Set(allTransactions.map(t => t.subcategory).filter(Boolean))].sort();
+
+                if (subcats.length === 0) {
+                    subcatSelect.innerHTML = '<option value="">Sin datos disponibles</option>';
+                    return;
+                }
+
+                subcatSelect.innerHTML = '<option value="">-- Selecciona una Subcategoría --</option>' + subcats.map(s => `<option value="${s}">${s}</option>`).join('');
+                if (subcats.includes(previousSelection)) subcatSelect.value = previousSelection;
+            }
+
+            function renderEvolutionChart() {
+                const year = document.getElementById('evo-year').value;
+                const subcat = document.getElementById('evo-subcat').value;
+                const canvas = document.getElementById('evo-chart');
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+
+                if (!subcat) { if (evoChartInstance) evoChartInstance.destroy(); return; }
+
+                const monthlyTotals = new Array(12).fill(0);
+                allTransactions.filter(t => t.date && t.date.startsWith(year) && t.subcategory === subcat).forEach(t => {
+                   const monthIndex = parseInt(t.date.split('-')[1], 10) - 1;
+                   if (monthIndex >= 0 && monthIndex < 12) monthlyTotals[monthIndex] += parseFloat(t.amount || 0);
+                });
+
+                if (evoChartInstance) evoChartInstance.destroy();
+                evoChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'], datasets: [{ label: `Evolución Mensual: ${subcat} (S/)`, data: monthlyTotals, backgroundColor: '#4f46e5', borderRadius: 4 }] },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, grace: '15%' } }, plugins: { datalabels: { anchor: 'end', align: 'top', font: { weight: 'bold', size: 11 }, formatter: function(v) { return v > 0 ? formatCurrency(v) : ''; } } } }
+                });
+            }
+
+            document.getElementById('evo-year').addEventListener('change', renderEvolutionChart);
+            document.getElementById('evo-subcat').addEventListener('change', renderEvolutionChart);
+
+            // --- LÓGICA DE REPORTES ---
+
+            function populateReportCategories() {
+                const currentSelection = document.getElementById('report-category').value;
+                const uniqueCategories = [...new Set(allTransactions.map(t => t.category).filter(Boolean))].sort();
+                
+                document.getElementById('report-category').innerHTML = '<option value="">Seleccione una categoría...</option>';
+                uniqueCategories.forEach(cat => document.getElementById('report-category').innerHTML += `<option value="${cat}">${cat}</option>`);
+                if (uniqueCategories.includes(currentSelection)) document.getElementById('report-category').value = currentSelection;
+            }
+
+            function populateReportSubcategories(categoryFilter) {
+                const currentSelection = document.getElementById('report-subcategory').value;
+                const subSelect = document.getElementById('report-subcategory');
+                
+                if (!categoryFilter) { subSelect.innerHTML = '<option value="">Seleccione una categoría primero...</option>'; subSelect.disabled = true; return; }
+
+                subSelect.disabled = false;
+                subSelect.innerHTML = '<option value="">Seleccione una subcategoría...</option>';
+                
+                const uniqueSubcategories = [...new Set(allTransactions.filter(t => t.category === categoryFilter).map(t => t.subcategory))].sort();
+                uniqueSubcategories.forEach(sub => { if(sub) subSelect.innerHTML += `<option value="${sub}">${sub}</option>`; });
+                
+                if (uniqueSubcategories.includes(currentSelection)) subSelect.value = currentSelection; else subSelect.value = '';
+            }
+
+            function generateCustomReport(category, subcategory) {
+                const annualContainer = document.getElementById('report-annual-summary'), monthlyContainer = document.getElementById('report-monthly-summary'), tableBody = document.getElementById('report-table-body');
+
+                if (!category || !subcategory) {
+                    annualContainer.innerHTML = 'Selecciona una categoría y subcategoría.'; monthlyContainer.innerHTML = 'Selecciona una categoría y subcategoría.';
+                    tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">Selecciona una categoría y subcategoría para ver el detalle.</td></tr>'; return;
+                }
+
+                const filtered = allTransactions.filter(t => t.category === category && t.subcategory === subcategory).sort((a, b) => new Date(b.date) - new Date(a.date));
+                if (filtered.length === 0) {
+                    annualContainer.innerHTML = 'No hay datos.'; monthlyContainer.innerHTML = 'No hay datos.';
+                    tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4">No se encontraron transacciones.</td></tr>'; return;
+                }
+
+                const annualTotals = {}, monthlyTotals = {};
+                filtered.forEach(t => {
+                    const year = t.date.substring(0, 4), month = t.date.substring(0, 7), amount = parseFloat(t.amount);
+                    annualTotals[year] = (annualTotals[year] || 0) + amount; monthlyTotals[month] = (monthlyTotals[month] || 0) + amount;
+                });
+
+                annualContainer.innerHTML = Object.keys(annualTotals).sort().reverse().map(year => `
+                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded border border-gray-200">
+                        <span class="font-bold text-gray-700">${year}</span><span class="text-primary font-bold text-base">${formatCurrency(annualTotals[year])}</span>
+                    </div>`).join('');
+
+                monthlyContainer.innerHTML = Object.keys(monthlyTotals).sort().reverse().map(month => `
+                    <div class="flex justify-between items-center p-3 bg-gray-50 rounded border border-gray-200">
+                        <span class="font-bold text-gray-700">${month}</span><span class="text-primary font-bold text-base">${formatCurrency(monthlyTotals[month])}</span>
+                    </div>`).join('');
+
+                tableBody.innerHTML = filtered.map(t => `
+                        <tr class="bg-white border-b hover:bg-gray-50">
+                            <td class="px-6 py-4">${t.date}</td>
+                            <td class="px-6 py-4">${t.category}</td>
+                            <td class="px-6 py-4 text-gray-500">${t.detail || '-'}</td>
+                            <td class="px-6 py-4">${t.paymentMethod || '-'}</td>
+                            <td class="px-6 py-4 text-right font-bold ${t.type === 'Ingreso' ? 'text-green-600' : 'text-red-600'}">${t.type === 'Ingreso' ? '+' : '-'}${formatCurrency(t.amount)}</td>
+                        </tr>`).join('');
+            }
+
+            // --- INTELIGENCIA ARTIFICIAL (GEMINI) ---
+            async function generateAiAnalysis() {
+                if (!allTransactions || allTransactions.length === 0) {
+                    showAlert("No hay suficientes transacciones para analizar.");
+                    return;
+                }
+
+                const analyzeAiBtn = document.getElementById('analyze-ai-btn');
+                const aiPeriodSelect = document.getElementById('ai-period');
+                const aiLoading = document.getElementById('ai-loading');
+                const aiResultContainer = document.getElementById('ai-result-container');
+                const aiResultContent = document.getElementById('ai-result-content');
+
+                analyzeAiBtn.disabled = true;
+                aiLoading.classList.remove('hidden');
+                aiLoading.classList.add('flex');
+                aiResultContainer.classList.add('hidden');
+                aiResultContent.innerHTML = '';
+
+                try {
+                    const period = aiPeriodSelect.value;
+                    const filteredTxs = filterTransactionsByPeriod(allTransactions, period);
+                    
+                    if (filteredTxs.length === 0) {
+                        showAlert("No hay transacciones registradas en el período seleccionado.");
+                        analyzeAiBtn.disabled = false;
+                        aiLoading.classList.add('hidden');
+                        aiLoading.classList.remove('flex');
+                        return;
+                    }
+
+                    const metrics = calculateMetrics(filteredTxs);
+                    const prompt = buildAiPrompt(metrics, period);
+                    const responseText = await callGeminiAPI(prompt);
+                    
+                    aiResultContent.innerHTML = formatMarkdown(responseText);
+                    aiResultContainer.classList.remove('hidden');
+                } catch (error) {
+                    console.error("Análisis de IA falló:", error);
+                    showAlert("Hubo un error al generar el análisis: " + error.message);
+                } finally {
+                    analyzeAiBtn.disabled = false;
+                    aiLoading.classList.add('hidden');
+                    aiLoading.classList.remove('flex');
+                }
+            }
+
+            function filterTransactionsByPeriod(transactions, period) {
+                const now = new Date();
+                let startDate = new Date();
+                if (period === 'current-month') { startDate = new Date(now.getFullYear(), now.getMonth(), 1); } 
+                else if (period === 'last-3-months') { startDate.setMonth(now.getMonth() - 3); } 
+                else if (period === 'last-year') { startDate.setFullYear(now.getFullYear() - 1); }
+                startDate.setHours(0, 0, 0, 0);
+                return transactions.filter(t => { const txDate = new Date(t.date + 'T00:00:00'); return txDate >= startDate; });
+            }
+
+            function calculateMetrics(transactions) {
+                let income = 0, expense = 0;
+                const categoryCounts = {};
+                const paymentCounts = {};
+
+                transactions.forEach(t => {
+                    const amount = parseFloat(t.amount) || 0;
+                    if (t.type === 'Ingreso') { income += amount; } 
+                    else if (t.type !== 'Transferencia') {
+                        expense += amount;
+                        categoryCounts[t.category] = (categoryCounts[t.category] || 0) + amount;
+                    }
+                    if(t.paymentMethod && t.type !== 'Transferencia') {
+                        paymentCounts[t.paymentMethod] = (paymentCounts[t.paymentMethod] || 0) + 1;
+                    }
+                });
+
+                const savingsRate = income > 0 ? (((income - expense) / income) * 100).toFixed(1) : ((expense === 0) ? 0 : -100);
+                const topCategories = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => `${e[0]} (S/ ${e[1].toFixed(2)})`);
+                const mostUsedPayment = Object.entries(paymentCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
+
+                return { income, expense, savingsRate, topCategories, mostUsedPayment, txCount: transactions.length };
+            }
+
+            function buildAiPrompt(metrics, period) {
+                const periodText = { 'current-month': 'este mes', 'last-3-months': 'los últimos 3 meses', 'last-year': 'el último año' }[period];
+                return `Analiza mis finanzas de ${periodText}. Aquí están mis métricas consolidadas:
+- Ingresos totales: S/ ${metrics.income.toFixed(2)}
+- Gastos totales: S/ ${metrics.expense.toFixed(2)}
+- Tasa de ahorro actual: ${metrics.savingsRate}%
+- Top 3 categorías de mayor gasto: ${metrics.topCategories.length > 0 ? metrics.topCategories.join(', ') : 'Ninguna'}
+- Método de pago más utilizado: ${metrics.mostUsedPayment}
+- Total de transacciones evaluadas: ${metrics.txCount}
+
+Por favor, redacta un análisis profesional con recomendaciones.`;
+            }
+
+            async function callGeminiAPI(prompt) {
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    systemInstruction: { parts: [{ text: "Eres un experto asesor financiero personal. Ayudas a las personas a optimizar su presupuesto." }] }
+                };
+
+                const delays = [1000, 2000, 4000, 8000, 16000];
+                let lastError = null;
+
+                for (let attempt = 0; attempt <= 5; attempt++) {
+                    try {
+                        const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                        const data = await response.json();
+                        if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]) {
+                            return data.candidates[0].content.parts[0].text;
+                        } else throw new Error("Estructura de respuesta inválida de la API");
+                    } catch (error) {
+                        lastError = error;
+                        if (attempt < 5) await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+                    }
+                }
+                throw lastError;
+            }
+
+            function formatMarkdown(text) {
+                return text
+                    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-primary">$1</strong>')
+                    .replace(/^### (.*$)/gim, '<h3 class="text-xl font-bold mt-5 mb-2 text-primary">$1</h3>')
+                    .replace(/^## (.*$)/gim, '<h2 class="text-2xl font-bold mt-6 mb-3 text-primary border-b pb-2">$1</h2>')
+                    .replace(/\n\n/g, '</p><p class="mb-4 text-gray-700 leading-relaxed">')
+                    .replace(/\n/g, '<br>');
+            }
+
+            // --- TABS NAVEGACIÓN ---
+
+            function setupTabs() {
+                const tabButtons = document.querySelectorAll('.tab-button');
+                const tabContents = document.querySelectorAll('.tab-content');
+                 const updateButtonStyle = (activeButton) => {
+                    tabButtons.forEach(btn => btn.className = 'tab-button px-3 py-2 font-medium text-sm rounded-t-lg border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors flex items-center gap-2');
+                    activeButton.className = 'tab-button active px-3 py-2 font-medium text-sm rounded-t-lg border-b-2 transition-colors flex items-center gap-2 border-primary text-primary bg-indigo-50';
+                };
+                tabButtons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        updateButtonStyle(button);
+                        const tabName = button.dataset.tab;
+                        tabContents.forEach(content => content.classList.toggle('hidden', content.id !== `${tabName}-content`));
+                        if (['monthly', 'annual'].includes(tabName)) updateDashboards();
+                        if (tabName === 'evolution') renderEvolutionChart();
+                        if (tabName === 'accounts') renderAccountsDashboard();
+                        if (tabName === 'settings') renderSettingsPanel();
+                        if (tabName === 'admin' && currentUserRole === 'admin') renderAdminPanel();
+                    });
+                });
+                updateButtonStyle(document.querySelector('.tab-button.active'));
+            }
+            
+            function setupExport() {
+                const exportBtn = document.getElementById('export-csv-btn');
+                exportBtn.addEventListener('click', () => {
+                    if (!allTransactions || allTransactions.length === 0) { showAlert("No hay transacciones para exportar."); return; }
+                    const headers = ["Fecha", "Tipo", "Categoría", "Subcategoría", "Detalle", "Monto", "Cuenta Origen", "Cuenta Destino"];
+                    const bom = "\uFEFF";
+                    const rows = allTransactions.map(t => [
+                        t.date, t.type, t.category || '', t.subcategory || '', `"${(t.detail || '').replace(/"/g, '""')}"`,
+                        t.amount, t.paymentMethod || '', t.destinationAccount || ''
+                    ]);
+                    const csvContent = bom + [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+                    const link = document.createElement("a");
+                    link.setAttribute("href", URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })));
+                    link.setAttribute("download", `transacciones_${new Date().toISOString().slice(0,10)}.csv`);
+                    link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link);
+                });
+            }
+            
+            // --- NUEVO REGISTRO Y FORMULARIO (ACTUALIZADO PARA TRANSFERENCIAS) ---
+            
+            function initTransactionForm() {
+                const form = document.getElementById('transaction-form');
+                form.reset();
+                const typeSelect = document.getElementById('trans-type');
+                const categorySelect = document.getElementById('trans-category');
+                const subcategorySelect = document.getElementById('trans-subcategory');
+                const paymentSelect = document.getElementById('trans-payment'); 
+                const destSelect = document.getElementById('trans-dest-account'); 
+
+                const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit' });
+                document.getElementById('trans-date').value = formatter.format(new Date());
+                
+                typeSelect.innerHTML = '<option value="">Seleccione...</option>';
+                Object.keys(masterCategories).forEach(type => typeSelect.innerHTML += `<option value="${type}">${type}</option>`);
+                typeSelect.innerHTML += `<option value="Transferencia" class="font-bold text-primary">🔄 Transferencia entre Cuentas</option>`;
+                
+                categorySelect.innerHTML = '<option value="">Seleccione...</option>';
+                subcategorySelect.innerHTML = '<option value="">Seleccione...</option>';
+                
+                paymentSelect.innerHTML = '<option value="">Seleccione...</option>';
+                destSelect.innerHTML = '<option value="">Seleccione...</option>';
+                userAccounts.forEach(acc => {
+                    const opt = `<option value="${acc.name}">${acc.name}</option>`;
+                    paymentSelect.innerHTML += opt;
+                    destSelect.innerHTML += opt;
+                });
+
+                document.getElementById('category-container').classList.remove('hidden');
+                document.getElementById('payment-dest-container').classList.add('hidden');
+                document.getElementById('label-trans-payment').textContent = 'Cuenta de Origen / Medio de Pago';
+                categorySelect.required = true;
+                subcategorySelect.required = true;
+                destSelect.required = false;
+            }
+
+            function setupTransactionFormListeners() {
+                const form = document.getElementById('transaction-form');
+                const saveBtn = document.getElementById('save-transaction-btn');
+                const typeSelect = document.getElementById('trans-type');
+                const categorySelect = document.getElementById('trans-category');
+                const subcategorySelect = document.getElementById('trans-subcategory');
+                
+                const catContainer = document.getElementById('category-container');
+                const destContainer = document.getElementById('payment-dest-container');
+                const paymentLabel = document.getElementById('label-trans-payment');
+                const destSelect = document.getElementById('trans-dest-account');
+                
+                typeSelect.addEventListener('change', () => {
+                    const selectedType = typeSelect.value;
+                    
+                    if (selectedType === 'Transferencia') {
+                        catContainer.classList.add('hidden');
+                        destContainer.classList.remove('hidden');
+                        paymentLabel.textContent = 'Cuenta de Origen (De donde sale)';
+                        categorySelect.required = false;
+                        subcategorySelect.required = false;
+                        destSelect.required = true;
+                        
+                        categorySelect.innerHTML = '<option value="">N/A</option>';
+                        subcategorySelect.innerHTML = '<option value="">N/A</option>';
+                    } else {
+                        catContainer.classList.remove('hidden');
+                        destContainer.classList.add('hidden');
+                        if (selectedType === 'Ingreso') {
+                            paymentLabel.textContent = 'Cuenta de Destino (A dónde entra)';
+                        } else {
+                            paymentLabel.textContent = 'Cuenta de Origen (Con qué se pagó)';
+                        }
+                        categorySelect.required = true;
+                        subcategorySelect.required = true;
+                        destSelect.required = false;
+
+                        categorySelect.innerHTML = '<option value="">Seleccione...</option>';
+                        if (selectedType && masterCategories[selectedType]) {
+                            Object.keys(masterCategories[selectedType]).forEach(cat => categorySelect.innerHTML += `<option value="${cat}">${cat}</option>`);
+                        }
+                        subcategorySelect.innerHTML = '<option value="">Seleccione...</option>';
+                    }
+                });
+                
+                categorySelect.addEventListener('change', () => {
+                    if (typeSelect.value === 'Transferencia') return;
+                    subcategorySelect.innerHTML = '<option value="">Seleccione...</option>';
+                    const selectedType = typeSelect.value, selectedCat = categorySelect.value;
+                    if (selectedType && selectedCat && masterCategories[selectedType][selectedCat]) {
+                        const sortedSubcats = [...masterCategories[selectedType][selectedCat]].sort();
+                        sortedSubcats.forEach(sub => subcategorySelect.innerHTML += `<option value="${sub}">${sub}</option>`);
+                    }
+                });
+
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    if (isSubmitting) return;
+                    if (!currentUser) return;
+                    
+                    const paymentSelect = document.getElementById('trans-payment').value;
+                    const destValue = destSelect.value;
+                    const typeValue = typeSelect.value;
+
+                    if (typeValue === 'Transferencia' && paymentSelect === destValue) {
+                        showAlert("La cuenta origen y destino no pueden ser la misma.");
+                        return;
+                    }
+
+                    isSubmitting = true;
+                    saveBtn.disabled = true;
+                    saveBtn.innerHTML = '<i data-lucide="loader" class="w-5 h-5 animate-spin"></i> Guardando...';
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+                    const newTransaction = { 
+                        type: typeValue, 
+                        category: typeValue === 'Transferencia' ? 'Transferencia' : categorySelect.value, 
+                        subcategory: typeValue === 'Transferencia' ? `${paymentSelect} a ${destValue}` : subcategorySelect.value, 
+                        amount: document.getElementById('trans-amount').value, 
+                        date: document.getElementById('trans-date').value, 
+                        paymentMethod: paymentSelect, 
+                        destinationAccount: typeValue === 'Transferencia' ? destValue : null,
+                        detail: document.getElementById('trans-detail').value.trim(), 
+                        createdAt: serverTimestamp() 
+                    };
+
+                    try {
+                        const transactionsRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'transactions');
+                        await addDoc(transactionsRef, newTransaction);
+                        try {
+                            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'user_roles', currentUser.uid), { txCount: increment(1) }, { merge: true });
+                        } catch(e) {}
+                        showAlert("¡Transacción registrada exitosamente!");
+                        initTransactionForm();
+                    } catch (error) { 
+                        showAlert("No se pudo guardar la transacción.");
+                    } finally {
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = '<i data-lucide="save" class="w-5 h-5"></i> Guardar Transacción';
+                        if (typeof lucide !== 'undefined') lucide.createIcons();
+                        isSubmitting = false;
+                    }
+                });
+            }
+            
+            function setupPasswordModal() {
+                const passwordModal = document.getElementById('password-modal'), openBtn = document.getElementById('change-password-btn'), closeBtn = document.getElementById('close-password-modal-btn'), passwordForm = document.getElementById('password-form'), passwordError = document.getElementById('password-error');
+                openBtn.addEventListener('click', () => { 
+                    passwordForm.reset(); 
+                    passwordError.classList.add('hidden'); 
+                    passwordModal.style.display = 'flex'; 
+                });
+                closeBtn.addEventListener('click', () => passwordModal.style.display = 'none');
+                passwordForm.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+                    const newPassword = document.getElementById('new-password').value, confirmPassword = document.getElementById('confirm-password').value;
+                    if (newPassword.length < 6) { passwordError.textContent = "La contraseña debe tener al menos 6 caracteres."; passwordError.classList.remove('hidden'); return; }
+                    if (newPassword !== confirmPassword) { passwordError.textContent = "Las contraseñas no coinciden."; passwordError.classList.remove('hidden'); return; }
+                    passwordError.classList.add('hidden');
+                    try {
+                        if (auth.currentUser && !auth.currentUser.isAnonymous) {
+                            await updatePassword(auth.currentUser, newPassword);
+                            showAlert("¡Contraseña actualizada con éxito!");
+                        } else {
+                            showAlert("En el entorno de prueba, no es necesario cambiar la contraseña.");
+                        }
+                        passwordModal.style.display = 'none';
+                    } catch (error) { passwordError.textContent = "Ocurrió un error. Vuelve a iniciar sesión e intenta de nuevo."; passwordError.classList.remove('hidden'); }
+                });
+            }
+            
+            // --- GESTIÓN ADM Y AJUSTES PERSONALES ---
+            function setupAdminListeners() {
+                // ---- BOTONES DE MIS AJUSTES (PRIVADOS) ----
+                document.getElementById('save-master-categories-btn').addEventListener('click', async () => {
+                    if (!currentUser) return;
+                    try {
+                        await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'categories'), { data: masterCategories });
+                        showAlert("Tus categorías se actualizaron con éxito.");
+                    } catch (error) {
+                        showAlert("No se pudieron guardar los cambios.");
+                    }
+                });
+
+                document.getElementById('save-master-accounts-btn').addEventListener('click', async () => {
+                    if (!currentUser) return;
+                    try {
+                        await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'accounts'), { accounts: masterAccountsList });
+                        
+                        const accountsRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts');
+                        const accountsSnap = await getDocs(accountsRef);
+                        const masterNames = masterAccountsList.map(a => a.name);
+                        const activeAccountNames = accountsSnap.docs.map(doc => doc.data().name);
+                        
+                        const batch = writeBatch(db);
+                        let hasChanges = false;
+                        
+                        accountsSnap.docs.forEach(docSnap => {
+                            if (!masterNames.includes(docSnap.data().name)) {
+                                batch.delete(docSnap.ref);
+                                hasChanges = true;
+                            }
+                        });
+
+                        masterAccountsList.forEach(masterAcc => {
+                            if (!activeAccountNames.includes(masterAcc.name)) {
+                                const newDocRef = doc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts'));
+                                batch.set(newDocRef, { ...masterAcc, initialBalance: 0, createdAt: serverTimestamp() });
+                                hasChanges = true;
+                            }
+                        });
+                        
+                        if (hasChanges) await batch.commit();
+
+                        showAlert("Tus cuentas base se actualizaron con éxito.");
+                    } catch (error) {
+                        showAlert("No se pudieron guardar los cambios de cuentas.");
+                    }
+                });
+
+                document.getElementById('check-unused-subcats-btn').addEventListener('click', () => {
+                    if (!allTransactions || allTransactions.length === 0) { showAlert("No hay transacciones registradas para analizar."); return; }
+                    const usedSubcats = new Set(allTransactions.map(t => t.subcategory).filter(Boolean));
+                    const unused = [];
+                    Object.keys(masterCategories).forEach(type => {
+                        Object.keys(masterCategories[type]).forEach(cat => {
+                            masterCategories[type][cat].forEach(sub => {
+                                if (!usedSubcats.has(sub)) unused.push({ type, category: cat, subcategory: sub });
+                            });
+                        });
+                    });
+
+                    const resultsContainer = document.getElementById('unused-subcats-results');
+                    resultsContainer.innerHTML = '';
+                    if (unused.length === 0) {
+                        resultsContainer.innerHTML = `<div class="col-span-full p-4 bg-green-50 border border-green-200 rounded-md flex items-center gap-3"><i data-lucide="check-circle" class="w-6 h-6 text-green-600"></i><p class="text-green-800 font-semibold">¡Excelente! Todas tus subcategorías están siendo utilizadas en al menos una transacción.</p></div>`;
+                    } else {
+                        const groupedUnused = unused.reduce((acc, item) => { acc[item.category] = acc[item.category] || []; acc[item.category].push(item.subcategory); return acc; }, {});
+                        Object.keys(groupedUnused).forEach(cat => {
+                            const div = document.createElement('div');
+                            div.className = 'p-4 bg-red-50 border border-red-100 rounded-md';
+                            div.innerHTML = `<h4 class="font-bold text-red-800 mb-2 flex items-center gap-2"><i data-lucide="folder-minus" class="w-4 h-4"></i> ${cat}</h4><ul class="list-disc ml-6 text-sm text-red-600 space-y-1">${groupedUnused[cat].map(sub => `<li>${sub}</li>`).join('')}</ul>`;
+                            resultsContainer.appendChild(div);
+                        });
+                    }
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                });
+
+                // ---- BOTONES DE ADMINISTRACIÓN (PLANTILLAS GLOBALES) ----
+                document.getElementById('save-global-categories-btn')?.addEventListener('click', async () => {
+                    if (currentUserRole !== 'admin') return;
+                    try {
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'master_categories'), { data: globalMasterCategories });
+                        showAlert("Plantilla Global de Categorías actualizada con éxito.");
+                    } catch (error) {
+                        showAlert("No se pudo guardar la plantilla global.");
+                    }
+                });
+
+                document.getElementById('save-global-accounts-btn')?.addEventListener('click', async () => {
+                    if (currentUserRole !== 'admin') return;
+                    try {
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'master_accounts'), { accounts: globalMasterAccountsList });
+                        showAlert("Plantilla Global de Cuentas actualizada con éxito.");
+                    } catch (error) {
+                        showAlert("No se pudo guardar la plantilla global.");
+                    }
+                });
+            }
+
+            function renderSettingsPanel() {
+                renderMasterCategoriesPanel();
+                renderMasterAccountsPanel();
+            }
+
+            async function renderAdminPanel() {
+                document.getElementById('metric-total-users').innerHTML = '<i data-lucide="loader-2" class="w-6 h-6 animate-spin mx-auto text-primary"></i>';
+                document.getElementById('metric-active-users').innerHTML = '<i data-lucide="loader-2" class="w-6 h-6 animate-spin mx-auto text-secondary"></i>';
+                document.getElementById('metric-total-txs').innerHTML = '<i data-lucide="loader-2" class="w-6 h-6 animate-spin mx-auto text-accent"></i>';
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+
+                await loadSystemMetrics();
+                await renderUserRolesPanel();
+                await loadGlobalTemplates();
+                renderGlobalCategoriesPanel();
+                renderGlobalAccountsPanel();
+            }
+
+            async function loadSystemMetrics() {
+                if (currentUserRole !== 'admin') return;
+                try {
+                    const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'user_roles');
+                    const usersSnap = await getDocs(usersRef);
+                    
+                    const totalUsers = usersSnap.size;
+                    let activeUsers = 0;
+                    let totalTxs = 0;
+
+                    for (const userDoc of usersSnap.docs) {
+                        const data = userDoc.data();
+                        if (data.status !== 'blocked') activeUsers++;
+                        totalTxs += (data.txCount || 0);
+                    }
+
+                    document.getElementById('metric-total-users').textContent = totalUsers;
+                    document.getElementById('metric-active-users').textContent = activeUsers;
+                    document.getElementById('metric-total-txs').textContent = totalTxs;
+                } catch (error) {
+                    console.error("Error al cargar métricas:", error);
+                }
+            }
+
+            async function loadGlobalTemplates() {
+                if (currentUserRole !== 'admin') return;
+                try {
+                    const catSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'master_categories'));
+                    if (catSnap.exists()) {
+                        globalMasterCategories = catSnap.data().data;
+                    } else {
+                        globalMasterCategories = { "Ingreso": { "Ingreso Fijo": ["Sueldo Fijo"], "Ingreso Variable": ["Emprendimiento"] }, "Gasto": { "Gasto Necesario": ["Mercado"], "Gastos Deseos": ["Salidas"] }, "Deuda": { "Deudas": ["Pago Tarjeta"] } };
+                    }
+                    
+                    const accSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'config', 'master_accounts'));
+                    if (accSnap.exists()) {
+                        globalMasterAccountsList = accSnap.data().accounts;
+                    } else {
+                        globalMasterAccountsList = [{ name: 'Efectivo (Billetera principal)', group: 'Efectivo y Billeteras' }];
+                    }
+                } catch (error) {
+                    console.error("Error cargando plantillas globales", error);
+                }
+            }
+
+            // RENDERS DE AJUSTES PRIVADOS DE USUARIO
+            async function renderMasterCategoriesPanel() {
+                const container = document.getElementById('master-categories-container');
+                container.innerHTML = ''; 
+                Object.keys(masterCategories).forEach(type => {
+                    const typeDiv = document.createElement('div');
+                    typeDiv.className = 'p-4 border rounded-lg bg-slate-50';
+                    let typeHtml = `<h3 class="text-xl font-bold text-primary mb-3">${type}</h3>`;
+                    Object.keys(masterCategories[type]).forEach(category => {
+                        const sortedSubcats = [...masterCategories[type][category]].sort();
+                        typeHtml += `<div class="ml-4 mb-4"><h4 class="font-semibold text-text-primary">${category}</h4><ul class="list-disc ml-5 mt-2 text-sm text-text-secondary space-y-1">
+                            ${sortedSubcats.map(sub => `<li class="flex items-center justify-between"><span>${sub}</span><button data-type="${type}" data-category="${category}" data-sub="${sub}" class="admin-delete-subcategory-btn text-red-500 hover:text-red-700 font-bold text-lg leading-none">&times;</button></li>`).join('')}
+                        </ul></div>`;
+                    });
+                    typeHtml += `<div class="mt-4 ml-4 p-2 border-t"><p class="text-sm font-medium mb-2">Añadir Nueva Subcategoría</p><div class="flex gap-2 items-center">
+                        <select class="admin-category-select border rounded-md p-2 text-sm w-1/3">${Object.keys(masterCategories[type]).map(cat => `<option value="${cat}">${cat}</option>`).join('')}</select>
+                        <input type="text" placeholder="Nombre de subcategoría" class="admin-subcategory-input border rounded-md p-2 text-sm flex-grow">
+                        <button class="admin-add-subcategory-btn bg-secondary text-white text-sm px-3 py-2 rounded-md hover:bg-secondary/90" data-type="${type}">Añadir</button>
+                    </div></div>`;
+                    typeDiv.innerHTML = typeHtml;
+                    container.appendChild(typeDiv);
+                });
+                container.querySelectorAll('.admin-add-subcategory-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                    const type = e.target.dataset.type, parentDiv = e.target.closest('.flex'), category = parentDiv.querySelector('.admin-category-select').value, input = parentDiv.querySelector('.admin-subcategory-input'), newSubcategory = input.value.trim();
+                    if (newSubcategory && category && !masterCategories[type][category].includes(newSubcategory)) { masterCategories[type][category].push(newSubcategory); renderMasterCategoriesPanel(); }
+                    input.value = '';
+                }));
+                container.querySelectorAll('.admin-delete-subcategory-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                    const { type, category, sub } = e.target.dataset, index = masterCategories[type][category].indexOf(sub);
+                    if (index > -1) { masterCategories[type][category].splice(index, 1); renderMasterCategoriesPanel(); }
+                }));
+            }
+
+            async function renderMasterAccountsPanel() {
+                const container = document.getElementById('master-accounts-container');
+                container.innerHTML = ''; 
+                const groups = ['Efectivo y Billeteras', 'Cuentas Bancarias', 'Tarjetas de Crédito'];
+
+                groups.forEach(groupName => {
+                    const groupAccounts = masterAccountsList.filter(a => a.group === groupName).map(a => a.name).sort();
+                    
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = 'p-4 border rounded-lg bg-slate-50';
+                    let html = `<h3 class="text-lg font-bold text-primary mb-3">${groupName}</h3>
+                    <ul class="list-disc ml-5 mt-2 text-sm text-text-secondary space-y-1 mb-4">
+                        ${groupAccounts.map(accName => `
+                            <li class="flex items-center justify-between">
+                                <span>${accName}</span>
+                                <button data-group="${groupName}" data-name="${accName}" class="admin-delete-account-btn text-red-500 hover:text-red-700 font-bold text-lg leading-none">&times;</button>
+                            </li>
+                        `).join('')}
+                    </ul>
+                    <div class="flex gap-2 items-center border-t pt-3">
+                        <input type="text" placeholder="Nueva cuenta..." class="admin-account-input border rounded-md p-2 text-sm flex-grow">
+                        <button class="admin-add-account-btn bg-secondary text-white text-sm px-3 py-2 rounded-md hover:bg-secondary/90" data-group="${groupName}">Añadir</button>
+                    </div>`;
+                    groupDiv.innerHTML = html;
+                    container.appendChild(groupDiv);
+                });
+
+                container.querySelectorAll('.admin-add-account-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                    const group = e.target.dataset.group;
+                    const input = e.target.previousElementSibling;
+                    const newName = input.value.trim();
+                    if (newName && !masterAccountsList.some(a => a.name === newName)) {
+                        masterAccountsList.push({ name: newName, group: group });
+                        masterAccountsList = masterAccountsList.sort();
+                        renderMasterAccountsPanel();
+                    }
+                    input.value = '';
+                }));
+
+                container.querySelectorAll('.admin-delete-account-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                    const { group, name } = e.target.dataset;
+                    masterAccountsList = masterAccountsList.filter(a => !(a.name === name && a.group === group));
+                    renderMasterAccountsPanel();
+                }));
+            }
+
+            // RENDERS DE ADMINISTRACIÓN GLOBAL
+            async function renderGlobalCategoriesPanel() {
+                const container = document.getElementById('global-categories-container');
+                container.innerHTML = ''; 
+                Object.keys(globalMasterCategories).forEach(type => {
+                    const typeDiv = document.createElement('div');
+                    typeDiv.className = 'p-4 border rounded-lg bg-slate-50 mb-4';
+                    let typeHtml = `<h4 class="text-lg font-bold text-primary mb-3">${type}</h4>`;
+                    Object.keys(globalMasterCategories[type]).forEach(category => {
+                        const sortedSubcats = [...globalMasterCategories[type][category]].sort();
+                        typeHtml += `<div class="ml-4 mb-4"><h5 class="font-semibold text-text-primary text-sm">${category}</h5><ul class="list-disc ml-5 mt-2 text-sm text-text-secondary space-y-1">
+                            ${sortedSubcats.map(sub => `<li class="flex items-center justify-between"><span>${sub}</span><button data-type="${type}" data-category="${category}" data-sub="${sub}" class="global-delete-subcategory-btn text-red-500 hover:text-red-700 font-bold text-lg leading-none">&times;</button></li>`).join('')}
+                        </ul></div>`;
+                    });
+                    typeHtml += `<div class="mt-4 ml-4 p-2 border-t"><div class="flex gap-2 items-center">
+                        <select class="global-category-select border rounded-md p-2 text-sm w-1/3">${Object.keys(globalMasterCategories[type]).map(cat => `<option value="${cat}">${cat}</option>`).join('')}</select>
+                        <input type="text" placeholder="Nueva subcategoría global" class="global-subcategory-input border rounded-md p-2 text-sm flex-grow">
+                        <button class="global-add-subcategory-btn bg-secondary text-white text-sm px-3 py-2 rounded-md hover:bg-secondary/90" data-type="${type}">Añadir</button>
+                    </div></div>`;
+                    typeDiv.innerHTML = typeHtml;
+                    container.appendChild(typeDiv);
+                });
+                container.querySelectorAll('.global-add-subcategory-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                    const type = e.target.dataset.type, parentDiv = e.target.closest('.flex'), category = parentDiv.querySelector('.global-category-select').value, input = parentDiv.querySelector('.global-subcategory-input'), newSubcategory = input.value.trim();
+                    if (newSubcategory && category && !globalMasterCategories[type][category].includes(newSubcategory)) { globalMasterCategories[type][category].push(newSubcategory); renderGlobalCategoriesPanel(); }
+                    input.value = '';
+                }));
+                container.querySelectorAll('.global-delete-subcategory-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                    const { type, category, sub } = e.target.dataset, index = globalMasterCategories[type][category].indexOf(sub);
+                    if (index > -1) { globalMasterCategories[type][category].splice(index, 1); renderGlobalCategoriesPanel(); }
+                }));
+            }
+
+            async function renderGlobalAccountsPanel() {
+                const container = document.getElementById('global-accounts-container');
+                container.innerHTML = ''; 
+                const groups = ['Efectivo y Billeteras', 'Cuentas Bancarias', 'Tarjetas de Crédito'];
+
+                groups.forEach(groupName => {
+                    const groupAccounts = globalMasterAccountsList.filter(a => a.group === groupName).map(a => a.name).sort();
+                    
+                    const groupDiv = document.createElement('div');
+                    groupDiv.className = 'p-4 border rounded-lg bg-slate-50 mb-4';
+                    let html = `<h4 class="text-md font-bold text-primary mb-3">${groupName}</h4>
+                    <ul class="list-disc ml-5 mt-2 text-sm text-text-secondary space-y-1 mb-4">
+                        ${groupAccounts.map(accName => `
+                            <li class="flex items-center justify-between">
+                                <span>${accName}</span>
+                                <button data-group="${groupName}" data-name="${accName}" class="global-delete-account-btn text-red-500 hover:text-red-700 font-bold text-lg leading-none">&times;</button>
+                            </li>
+                        `).join('')}
+                    </ul>
+                    <div class="flex gap-2 items-center border-t pt-3">
+                        <input type="text" placeholder="Nueva cuenta global..." class="global-account-input border rounded-md p-2 text-sm flex-grow">
+                        <button class="global-add-account-btn bg-secondary text-white text-sm px-3 py-2 rounded-md hover:bg-secondary/90" data-group="${groupName}">Añadir</button>
+                    </div>`;
+                    groupDiv.innerHTML = html;
+                    container.appendChild(groupDiv);
+                });
+
+                container.querySelectorAll('.global-add-account-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                    const group = e.target.dataset.group;
+                    const input = e.target.previousElementSibling;
+                    const newName = input.value.trim();
+                    if (newName && !globalMasterAccountsList.some(a => a.name === newName)) {
+                        globalMasterAccountsList.push({ name: newName, group: group });
+                        globalMasterAccountsList = globalMasterAccountsList.sort();
+                        renderGlobalAccountsPanel();
+                    }
+                    input.value = '';
+                }));
+
+                container.querySelectorAll('.global-delete-account-btn').forEach(btn => btn.addEventListener('click', (e) => {
+                    const { group, name } = e.target.dataset;
+                    globalMasterAccountsList = globalMasterAccountsList.filter(a => !(a.name === name && a.group === group));
+                    renderGlobalAccountsPanel();
+                }));
+            }
+
+            async function renderUserRolesPanel() {
+                const container = document.getElementById('user-roles-container');
+                container.innerHTML = `<div class="text-center p-4"><i data-lucide="loader-2" class="w-6 h-6 animate-spin mx-auto text-primary"></i></div>`;
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+                
+                try {
+                    const usersCollection = collection(db, 'artifacts', appId, 'public', 'data', 'user_roles');
+                    const userSnapshot = await getDocs(usersCollection);
+                    const usersList = userSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    
+                    container.innerHTML = usersList.map(user => {
+                        const isAdmin = user.role === 'admin';
+                        const isBlocked = user.status === 'blocked';
+                        const isSelf = user.id === currentUser.uid;
+                        const roleDisabled = isSelf ? 'disabled' : '';
+                        
+                        return `<div class="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-gray-50 border ${isBlocked ? 'border-red-300 bg-red-50' : 'border-gray-200'} rounded-md gap-4">
+                            <div>
+                                <span class="text-sm font-bold block ${isBlocked ? 'text-red-700' : 'text-gray-800'}">${user.email}</span>
+                                <span class="text-xs text-gray-500">${user.id}</span>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <div class="flex flex-col gap-1">
+                                    <label class="text-xs text-gray-500 font-semibold uppercase">Estado</label>
+                                    <select data-uid="${user.id}" class="status-select border ${isBlocked ? 'border-red-400 text-red-700' : 'border-gray-300'} rounded-md p-1.5 text-sm bg-white" ${roleDisabled}>
+                                        <option value="active" ${!isBlocked ? 'selected' : ''}>Activo (Permitido)</option>
+                                        <option value="blocked" ${isBlocked ? 'selected' : ''}>Bloqueado (Sin acceso)</option>
+                                    </select>
+                                </div>
+                                <div class="flex flex-col gap-1">
+                                    <label class="text-xs text-gray-500 font-semibold uppercase">Rol</label>
+                                    <select data-uid="${user.id}" class="role-select border border-gray-300 rounded-md p-1.5 text-sm bg-white" ${roleDisabled}>
+                                        <option value="user" ${!isAdmin ? 'selected' : ''}>Usuario Normal</option>
+                                        <option value="admin" ${isAdmin ? 'selected' : ''}>Administrador</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>`;
+                    }).join('');
+
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+                    container.querySelectorAll('.role-select').forEach(select => {
+                        select.addEventListener('change', (e) => {
+                            const newRole = e.target.value, uid = e.target.dataset.uid;
+                            showConfirmation(`¿Seguro que quieres cambiar el rol a "${newRole}"?`, async () => {
+                                 try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'user_roles', uid), { role: newRole }, { merge: true }); showAlert("Rol actualizado."); } 
+                                 catch (error) { showAlert("No se pudo actualizar el rol."); renderUserRolesPanel(); }
+                            });
+                        });
+                    });
+
+                    container.querySelectorAll('.status-select').forEach(select => {
+                        select.addEventListener('change', (e) => {
+                            const newStatus = e.target.value, uid = e.target.dataset.uid;
+                            const actionText = newStatus === 'blocked' ? "BLOQUEAR (quitar acceso)" : "ACTIVAR (dar acceso)";
+                            showConfirmation(`¿Seguro que quieres ${actionText} a este usuario?`, async () => {
+                                 try { 
+                                     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'user_roles', uid), { status: newStatus }, { merge: true }); 
+                                     showAlert("Estado actualizado con éxito.");
+                                     renderUserRolesPanel();
+                                     loadSystemMetrics();
+                                 } 
+                                 catch (error) { showAlert("No se pudo actualizar el estado."); renderUserRolesPanel(); }
+                            });
+                        });
+                    });
+
+                } catch (error) {
+                    container.innerHTML = `<div class="text-center p-4 text-red-500">Error al cargar usuarios.</div>`;
+                }
+            }
+
+            // --- UTILIDADES ---
+            function resetInactivityTimer() {
+                clearTimeout(inactivityTimer);
+                inactivityTimer = setTimeout(() => showAlert("Se ha cerrado la sesión por inactividad.", () => signOut(auth)), 15 * 60 * 1000); 
+            }
+            
+            function updateClock() {
+                const now = new Date();
+                const options = { timeZone: 'America/Lima', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: 'numeric' };
+                const formatter = new Intl.DateTimeFormat('es-PE', options);
+                document.getElementById('current-datetime').textContent = formatter.format(now).replace(/^\w/, c => c.toUpperCase());
+            }
+            
+            function showAlert(message, onOk) {
+                const modal = document.getElementById('alert-modal'), msg = document.getElementById('alert-message'), okBtn = document.getElementById('alert-ok-btn');
+                msg.textContent = message; modal.style.display = 'flex';
+                okBtn.onclick = () => { modal.style.display = 'none'; if (onOk) onOk(); };
+            }
+            
+            function showConfirmation(message, onConfirm) {
+                const modal = document.getElementById('confirm-modal'), msg = document.getElementById('confirm-message'), okBtn = document.getElementById('confirm-ok-btn'), cancelBtn = document.getElementById('confirm-cancel-btn');
+                msg.textContent = message; modal.style.display = 'flex';
+                const onOkClick = () => { onConfirm(); cleanup(); }, onCancelClick = () => cleanup();
+                const cleanup = () => { modal.style.display = 'none'; okBtn.removeEventListener('click', onOkClick); cancelBtn.removeEventListener('click', onCancelClick); };
+                okBtn.addEventListener('click', onOkClick, { once: true }); cancelBtn.addEventListener('click', onCancelClick, { once: true });
+            }
+        });
+    </script>
+</body>
+</html>
