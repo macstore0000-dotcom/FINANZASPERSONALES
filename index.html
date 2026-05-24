@@ -112,7 +112,7 @@
                 <span>Estado del Sistema</span>
                 <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full font-bold flex items-center gap-1">
                     <span class="w-1.5 h-1.5 bg-green-500 rounded-full inline-block animate-pulse"></span>
-                    V2026.05.24.6 - Stable
+                    V2026.05.24.7 - Stable
                 </span>
             </div>
         </div>
@@ -1290,8 +1290,10 @@
             };
 
             window.deleteTx = (id) => {
-                showConfirmation("¿Estás seguro de que quieres eliminar esta transacción?", async () => {
-                    if (!currentUser) return;
+                if (!currentUser) return;
+                const tx = (allTransactions || []).find(t => t.id === id);
+
+                const doDelete = async () => {
                     try {
                         await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'transactions', id));
                         try {
@@ -1300,7 +1302,36 @@
                     } catch (error) {
                         showAlert("Error al eliminar la transacción.");
                     }
-                });
+                };
+
+                // Advertencia especial si es una transacción de Ajuste
+                if (tx && tx.category === 'Ajuste') {
+                    const accName = tx.paymentMethod;
+                    const currentBal = computeLiveBalance(accName);
+                    const txAmount = parseFloat(tx.amount) || 0;
+                    let projectedBal = currentBal;
+                    if (currentBal !== null) {
+                        // Al eliminar, se revierte el efecto: si era Ingreso (+), bajar; si era Gasto (-), subir
+                        if (tx.type === 'Ingreso') {
+                            projectedBal = currentBal - txAmount;
+                        } else {
+                            projectedBal = currentBal + txAmount;
+                        }
+                    }
+
+                    let msg = `Estás eliminando una transacción de Ajuste.\n\nSi continuas:\n`;
+                    if (currentBal !== null && accName) {
+                        msg += `• Tu saldo de "${accName}" cambiará de S/ ${currentBal.toFixed(2)} a S/ ${projectedBal.toFixed(2)}.\n`;
+                    }
+                    msg += `• El registro de auditoría se perderá.\n`;
+                    msg += `• El cooldown de 30 días para el modal de Ajustar Saldos seguirá activo.\n\n¿Continuar?`;
+
+                    showConfirmation(msg, doDelete);
+                    return;
+                }
+
+                // Comportamiento normal para el resto de transacciones
+                showConfirmation("¿Estás seguro de que quieres eliminar esta transacción?", doDelete);
             };
 
             window.deleteAccount = (id, name) => {
