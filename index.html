@@ -542,7 +542,7 @@
     <div id="alert-modal" class="modal">
         <div class="modal-content">
              <h3 id="alert-title" class="text-lg font-bold mb-4">Aviso</h3>
-             <p id="alert-message" class="mb-6"></p>
+             <p id="alert-message" class="mb-6 whitespace-pre-line text-left"></p>
              <div class="flex justify-end">
                 <button id="alert-ok-btn" class="px-4 py-2 text-white bg-primary rounded-md hover:bg-primary/90">OK</button>
             </div>
@@ -1819,10 +1819,20 @@ Por favor, redacta un análisis profesional con recomendaciones.`;
                     const paymentSelect = document.getElementById('trans-payment').value;
                     const destValue = destSelect.value;
                     const typeValue = typeSelect.value;
+                    const amountValue = parseFloat(document.getElementById('trans-amount').value) || 0;
 
                     if (typeValue === 'Transferencia' && paymentSelect === destValue) {
                         showAlert("La cuenta origen y destino no pueden ser la misma.");
                         return;
+                    }
+
+                    // Validación de saldo / límite de crédito
+                    if (typeValue === 'Gasto' || typeValue === 'Transferencia') {
+                        const validationError = validateAccountBalance(paymentSelect, amountValue);
+                        if (validationError) {
+                            showAlert(validationError);
+                            return;
+                        }
                     }
 
                     isSubmitting = true;
@@ -1859,6 +1869,58 @@ Por favor, redacta un análisis profesional con recomendaciones.`;
                         isSubmitting = false;
                     }
                 });
+
+                // Calcula el saldo actual de una cuenta usando saldo inicial + todas las transacciones
+                function computeLiveBalance(accountName) {
+                    const acc = (userAccounts || []).find(a => a.name === accountName);
+                    if (!acc) return null;
+                    let bal = parseFloat(acc.initialBalance || 0);
+                    (allTransactions || []).forEach(t => {
+                        const amt = parseFloat(t.amount) || 0;
+                        if (t.type === 'Ingreso') {
+                            if (t.paymentMethod === accountName) bal += amt;
+                        } else if (t.type === 'Transferencia') {
+                            if (t.paymentMethod === accountName) bal -= amt;
+                            if (t.destinationAccount === accountName) bal += amt;
+                        } else {
+                            if (t.paymentMethod === accountName) bal -= amt;
+                        }
+                    });
+                    return bal;
+                }
+
+                // Devuelve string con el mensaje de error si la operación NO es permitida; null si está OK.
+                function validateAccountBalance(accountName, amount) {
+                    if (!accountName) return null;
+                    const acc = (userAccounts || []).find(a => a.name === accountName);
+                    if (!acc) return null;
+                    const currentBal = computeLiveBalance(accountName);
+                    if (currentBal === null) return null;
+                    const projectedBal = currentBal - amount;
+
+                    if (acc.group === 'Tarjetas de Crédito') {
+                        const rawLimit = acc.creditLimit;
+                        if (rawLimit === undefined || rawLimit === null || rawLimit === '' || isNaN(parseFloat(rawLimit))) {
+                            return null; // sin límite configurado: no bloquea
+                        }
+                        const limit = parseFloat(rawLimit);
+                        const overPct = parseFloat(acc.overdraftPercent || 0);
+                        const maxDebt = limit * (1 + overPct / 100);
+                        const projectedDebt = -projectedBal;
+                        if (projectedDebt > maxDebt) {
+                            const exceso = projectedDebt - maxDebt;
+                            return `Operación bloqueada: la tarjeta "${accountName}" excedería su tope.\n\nDeuda actual: S/ ${(-currentBal).toFixed(2)}\nDeuda proyectada: S/ ${projectedDebt.toFixed(2)}\nTope permitido (límite ${limit.toFixed(2)} + sobregiro ${overPct}%): S/ ${maxDebt.toFixed(2)}\nExceso: S/ ${exceso.toFixed(2)}`;
+                        }
+                        return null;
+                    }
+
+                    // Efectivo/Billeteras y Cuentas Bancarias: bloqueo estricto, no permite negativos
+                    if (projectedBal < 0) {
+                        const faltante = -projectedBal;
+                        return `Operación bloqueada: la cuenta "${accountName}" no tiene saldo suficiente.\n\nSaldo actual: S/ ${currentBal.toFixed(2)}\nMonto a usar: S/ ${amount.toFixed(2)}\nFaltante: S/ ${faltante.toFixed(2)}`;
+                    }
+                    return null;
+                }
             }
             
             function setupPasswordModal() {
@@ -1972,6 +2034,18 @@ Por favor, redacta un análisis profesional con recomendaciones.`;
 
                         if (toDelete.length === 0 && toAdd.length === 0) {
                             await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'accounts'), { accounts: masterAccountsList });
+                            const batch = writeBatch(db);
+                            let touched = false;
+                            accountsSnap.docs.forEach(docSnap => {
+                                const master = masterAccountsList.find(m => m.name === docSnap.data().name);
+                                if (!master) return;
+                                const updateFields = {};
+                                updateFields.creditLimit = master.creditLimit !== undefined ? master.creditLimit : null;
+                                updateFields.overdraftPercent = master.overdraftPercent !== undefined ? master.overdraftPercent : null;
+                                batch.update(docSnap.ref, updateFields);
+                                touched = true;
+                            });
+                            if (touched) await batch.commit();
                             showAlert("Tus cuentas base se actualizaron con éxito.");
                             return;
                         }
@@ -2012,6 +2086,17 @@ Por favor, redacta un análisis profesional con recomendaciones.`;
                                 toAdd.forEach(masterAcc => {
                                     const newDocRef = doc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts'));
                                     batch.set(newDocRef, { ...masterAcc, initialBalance: 0, createdAt: serverTimestamp() });
+                                });
+                                accountsSnap.docs.forEach(docSnap => {
+                                    if (!masterNames.includes(docSnap.data().name)) return;
+                                    const master = masterAccountsList.find(m => m.name === docSnap.data().name);
+                                    if (!master) return;
+                                    const updateFields = {};
+                                    if (master.creditLimit !== undefined) updateFields.creditLimit = master.creditLimit;
+                                    else updateFields.creditLimit = null;
+                                    if (master.overdraftPercent !== undefined) updateFields.overdraftPercent = master.overdraftPercent;
+                                    else updateFields.overdraftPercent = null;
+                                    batch.update(docSnap.ref, updateFields);
                                 });
                                 await batch.commit();
                                 showAlert("Tus cuentas base se actualizaron con éxito.");
@@ -2187,18 +2272,42 @@ Por favor, redacta un análisis profesional con recomendaciones.`;
                 const groups = ['Efectivo y Billeteras', 'Cuentas Bancarias', 'Tarjetas de Crédito'];
 
                 groups.forEach(groupName => {
-                    const groupAccounts = masterAccountsList.filter(a => a.group === groupName).map(a => a.name).sort();
+                    const isCard = (groupName === 'Tarjetas de Crédito');
+                    const groupAccountsObjs = masterAccountsList.filter(a => a.group === groupName)
+                        .slice()
+                        .sort((a,b) => a.name.localeCompare(b.name));
                     
                     const groupDiv = document.createElement('div');
                     groupDiv.className = 'p-4 border rounded-lg bg-slate-50';
-                    let html = `<h3 class="text-lg font-bold text-primary mb-3">${groupName}</h3>
-                    <ul class="list-disc ml-5 mt-2 text-sm text-text-secondary space-y-1 mb-4">
-                        ${groupAccounts.map(accName => `
-                            <li class="flex items-center justify-between">
-                                <span>${accName}</span>
-                                <button data-group="${groupName}" data-name="${accName}" class="admin-delete-account-btn text-red-500 hover:text-red-700 font-bold text-lg leading-none">&times;</button>
-                            </li>
-                        `).join('')}
+                    let html = `<h3 class="text-lg font-bold text-primary mb-3">${groupName}</h3>`;
+                    if (isCard) {
+                        html += `<p class="text-xs text-text-secondary mb-3">Configura un límite de crédito para activar el bloqueo cuando excedas el cupo. Deja el límite vacío si no quieres bloqueo en esa tarjeta.</p>`;
+                    }
+                    html += `<ul class="space-y-2 mb-4">
+                        ${groupAccountsObjs.map(acc => {
+                            const escName = escapeHtml(acc.name);
+                            if (isCard) {
+                                const limitVal = acc.creditLimit !== undefined && acc.creditLimit !== null && acc.creditLimit !== '' ? acc.creditLimit : '';
+                                const overVal = acc.overdraftPercent !== undefined && acc.overdraftPercent !== null && acc.overdraftPercent !== '' ? acc.overdraftPercent : '';
+                                return `
+                                <li class="flex flex-wrap items-center gap-2 bg-white p-2 rounded border">
+                                    <span class="font-medium text-sm flex-grow min-w-[120px]">${escName}</span>
+                                    <label class="text-xs text-text-secondary">Límite S/
+                                        <input type="number" min="0" step="0.01" value="${limitVal}" data-name="${escName}" data-field="creditLimit" class="admin-account-field border rounded px-2 py-1 text-sm w-24 ml-1" placeholder="—">
+                                    </label>
+                                    <label class="text-xs text-text-secondary">Sobregiro %
+                                        <input type="number" min="0" max="100" step="0.1" value="${overVal}" data-name="${escName}" data-field="overdraftPercent" class="admin-account-field border rounded px-2 py-1 text-sm w-20 ml-1" placeholder="0">
+                                    </label>
+                                    <button data-group="${groupName}" data-name="${escName}" class="admin-delete-account-btn text-red-500 hover:text-red-700 font-bold text-lg leading-none px-1">&times;</button>
+                                </li>`;
+                            } else {
+                                return `
+                                <li class="flex items-center justify-between bg-white p-2 rounded border">
+                                    <span class="text-sm">${escName}</span>
+                                    <button data-group="${groupName}" data-name="${escName}" class="admin-delete-account-btn text-red-500 hover:text-red-700 font-bold text-lg leading-none">&times;</button>
+                                </li>`;
+                            }
+                        }).join('')}
                     </ul>
                     <div class="flex gap-2 items-center border-t pt-3">
                         <input type="text" placeholder="Nueva cuenta..." class="admin-account-input border rounded-md p-2 text-sm flex-grow">
@@ -2208,13 +2317,34 @@ Por favor, redacta un análisis profesional con recomendaciones.`;
                     container.appendChild(groupDiv);
                 });
 
+                // Listener para los campos de límite y sobregiro
+                container.querySelectorAll('.admin-account-field').forEach(inp => inp.addEventListener('input', (e) => {
+                    const name = e.target.dataset.name;
+                    const field = e.target.dataset.field;
+                    const raw = e.target.value;
+                    const acct = masterAccountsList.find(a => a.name === name);
+                    if (!acct) return;
+                    if (raw === '' || raw === null) {
+                        delete acct[field];
+                    } else {
+                        const num = parseFloat(raw);
+                        if (!isNaN(num) && num >= 0) {
+                            acct[field] = num;
+                        }
+                    }
+                }));
+
                 container.querySelectorAll('.admin-add-account-btn').forEach(btn => btn.addEventListener('click', (e) => {
                     const group = e.target.dataset.group;
                     const input = e.target.previousElementSibling;
                     const newName = input.value.trim();
                     if (newName && !masterAccountsList.some(a => a.name === newName)) {
-                        masterAccountsList.push({ name: newName, group: group });
-                        masterAccountsList = masterAccountsList.sort();
+                        const newAcc = { name: newName, group: group };
+                        if (group === 'Tarjetas de Crédito') {
+                            newAcc.overdraftPercent = 0;
+                        }
+                        masterAccountsList.push(newAcc);
+                        masterAccountsList = masterAccountsList.sort((a,b) => a.name.localeCompare(b.name));
                         renderMasterAccountsPanel();
                     }
                     input.value = '';
