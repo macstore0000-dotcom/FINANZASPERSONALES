@@ -112,7 +112,7 @@
                 <span>Estado del Sistema</span>
                 <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full font-bold flex items-center gap-1">
                     <span class="w-1.5 h-1.5 bg-green-500 rounded-full inline-block animate-pulse"></span>
-                    V2026.05.24.5 - Stable
+                    V2026.05.24.6 - Stable
                 </span>
             </div>
         </div>
@@ -494,13 +494,20 @@
     <div id="balances-modal" class="modal">
         <div class="modal-content">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold text-primary">Configurar Saldos (Día Cero)</h3>
+                <h3 id="balances-modal-title" class="text-xl font-bold text-primary">Configurar Saldos</h3>
                 <button id="close-balances-modal-btn" class="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
             </div>
             
-            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4 text-sm text-blue-800 rounded">
+            <div id="balances-modal-instructions-zero" class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4 text-sm text-blue-800 rounded hidden">
+                <p class="mb-2"><strong>Modo "Día Cero":</strong> estás configurando tus saldos iniciales por primera vez.</p>
                 <p class="mb-2"><strong>1. Efectivo y Bancos:</strong> Ingresa el dinero a favor que tienes HOY.</p>
                 <p><strong>2. Tarjetas de Crédito:</strong> <span class="font-bold text-red-600">NO ingreses tu línea de crédito.</span> Si tu tarjeta no tiene deudas hoy, ingresa <strong>0</strong>. Si actualmente ya le debes dinero al banco, ingresa tu deuda actual en <strong>negativo</strong> (ejemplo: -450.50).</p>
+            </div>
+
+            <div id="balances-modal-instructions-adjust" class="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-4 text-sm text-yellow-900 rounded hidden">
+                <p class="mb-2"><strong>⚠ Modo Ajuste:</strong> esta opción debe usarse SOLO si tus saldos en el sistema no coinciden con tus saldos reales.</p>
+                <p class="mb-2"><strong>NO la uses</strong> para registrar gastos o ingresos del día a día. Para eso usa <strong>"Nuevo Registro"</strong>.</p>
+                <p>Cada ajuste queda registrado en el Historial como una transacción tipo "Ajuste". <strong>Disponible 1 vez cada 30 días.</strong></p>
             </div>
 
             <form id="balances-form">
@@ -909,17 +916,65 @@
                 const closeBtn = document.getElementById('close-balances-modal-btn');
                 const form = document.getElementById('balances-form');
                 const container = document.getElementById('balances-inputs-container');
+                const title = document.getElementById('balances-modal-title');
+                const instrZero = document.getElementById('balances-modal-instructions-zero');
+                const instrAdjust = document.getElementById('balances-modal-instructions-adjust');
 
-                btn.onclick = () => {
+                // Determina si el usuario está en "modo día cero" (sin transacciones y todos los saldos iniciales en 0)
+                function isDayZeroMode() {
+                    const hasTransactions = (allTransactions || []).length > 0;
+                    if (hasTransactions) return false;
+                    const allZero = (userAccounts || []).every(a => parseFloat(a.initialBalance || 0) === 0);
+                    return allZero;
+                }
+
+                // Verifica si ya pasó el cooldown de 30 días desde el último ajuste
+                async function canAdjustNow() {
+                    if (!currentUser) return { ok: false, daysLeft: 0 };
+                    try {
+                        const metaRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'meta');
+                        const metaSnap = await getDoc(metaRef);
+                        if (!metaSnap.exists()) return { ok: true, daysLeft: 0 };
+                        const lastAdjust = metaSnap.data().lastBalanceAdjust;
+                        if (!lastAdjust) return { ok: true, daysLeft: 0 };
+                        const lastDate = lastAdjust.toDate ? lastAdjust.toDate() : new Date(lastAdjust);
+                        const diffMs = Date.now() - lastDate.getTime();
+                        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+                        if (diffDays >= 30) return { ok: true, daysLeft: 0 };
+                        return { ok: false, daysLeft: Math.ceil(30 - diffDays) };
+                    } catch (e) {
+                        return { ok: true, daysLeft: 0 };
+                    }
+                }
+
+                btn.onclick = async () => {
+                    const dayZero = isDayZeroMode();
+
+                    if (!dayZero) {
+                        const check = await canAdjustNow();
+                        if (!check.ok) {
+                            showAlert(`Ya realizaste un ajuste de saldos recientemente.\n\nPodrás volver a usar esta opción en ${check.daysLeft} ${check.daysLeft === 1 ? 'día' : 'días'}.\n\nMientras tanto, registra tus movimientos del día a día desde "Nuevo Registro".`);
+                            return;
+                        }
+                    }
+
                     container.innerHTML = '';
                     userAccounts.forEach(acc => {
+                        const valToShow = dayZero
+                            ? parseFloat(acc.initialBalance || 0)
+                            : computeLiveBalance(acc.name) || 0;
                         container.innerHTML += `
                             <div class="flex justify-between items-center">
-                                <label class="text-sm font-medium w-2/3">${acc.name}</label>
-                                <input type="number" step="0.01" class="border rounded p-1 w-1/3 text-right" data-id="${acc.id}" value="${parseFloat(acc.initialBalance || 0).toFixed(2)}">
+                                <label class="text-sm font-medium w-2/3">${escapeHtml(acc.name)}</label>
+                                <input type="number" step="0.01" class="border rounded p-1 w-1/3 text-right" data-id="${escapeHtml(acc.id)}" data-account-name="${escapeHtml(acc.name)}" value="${valToShow.toFixed(2)}">
                             </div>
                         `;
                     });
+
+                    title.textContent = dayZero ? 'Configurar Saldos (Día Cero)' : 'Ajustar Saldos Actuales';
+                    instrZero.classList.toggle('hidden', !dayZero);
+                    instrAdjust.classList.toggle('hidden', dayZero);
+
                     modal.style.display = 'flex';
                 };
 
@@ -930,24 +985,114 @@
                     if (!currentUser) return;
                     const inputs = container.querySelectorAll('input');
                     const btnSubmit = form.querySelector('button[type="submit"]');
-                    btnSubmit.disabled = true;
-                    btnSubmit.innerHTML = 'Guardando...';
+                    const dayZero = isDayZeroMode();
 
-                    try {
-                        for (const input of inputs) {
-                            const id = input.getAttribute('data-id');
-                            const newVal = parseFloat(input.value || 0);
-                            await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts', id), { initialBalance: newVal });
+                    if (dayZero) {
+                        // MODO DÍA CERO: comportamiento original, sobrescribe initialBalance
+                        btnSubmit.disabled = true;
+                        btnSubmit.innerHTML = 'Guardando...';
+                        try {
+                            for (const input of inputs) {
+                                const id = input.getAttribute('data-id');
+                                const newVal = parseFloat(input.value || 0);
+                                await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts', id), { initialBalance: newVal });
+                            }
+                            modal.style.display = 'none';
+                            showAlert("Saldos iniciales guardados correctamente.");
+                        } catch (error) {
+                            showAlert("Error al guardar los saldos.");
+                        } finally {
+                            btnSubmit.disabled = false;
+                            btnSubmit.innerHTML = '<i data-lucide="save" class="w-4 h-4"></i> Guardar Saldos';
+                            if (typeof lucide !== 'undefined') lucide.createIcons();
                         }
-                        modal.style.display = 'none';
-                        showAlert("Saldos actualizados correctamente. El Patrimonio ha sido recalculado.");
-                    } catch (error) {
-                        showAlert("Error al guardar los saldos.");
-                    } finally {
-                        btnSubmit.disabled = false;
-                        btnSubmit.innerHTML = '<i data-lucide="save" class="w-4 h-4"></i> Guardar Saldos';
-                        if (typeof lucide !== 'undefined') lucide.createIcons();
+                        return;
                     }
+
+                    // MODO AJUSTE: calcular diferencias y crear transacciones de ajuste
+                    const adjustments = [];
+                    for (const input of inputs) {
+                        const accName = input.getAttribute('data-account-name');
+                        const target = parseFloat(input.value || 0);
+                        const current = computeLiveBalance(accName);
+                        if (current === null) continue;
+                        const diff = target - current;
+                        if (Math.abs(diff) >= 0.005) {
+                            adjustments.push({ accountName: accName, current, target, diff });
+                        }
+                    }
+
+                    if (adjustments.length === 0) {
+                        modal.style.display = 'none';
+                        showAlert("No detectamos cambios en los saldos. Nada que ajustar.");
+                        return;
+                    }
+
+                    // Construir mensaje de confirmación
+                    const lines = adjustments.map(a => {
+                        const sign = a.diff > 0 ? '+' : '';
+                        return `• "${a.accountName}": ${sign}S/ ${a.diff.toFixed(2)} (de S/ ${a.current.toFixed(2)} a S/ ${a.target.toFixed(2)})`;
+                    });
+                    const msg = `Vas a crear ${adjustments.length} ${adjustments.length === 1 ? 'ajuste' : 'ajustes'} que afectarán tu Patrimonio Neto:\n\n${lines.join('\n')}\n\nCada ajuste quedará registrado como una transacción tipo "Ajuste" con fecha de hoy.\n\n¿Continuar?`;
+
+                    showConfirmation(msg, async () => {
+                        btnSubmit.disabled = true;
+                        btnSubmit.innerHTML = 'Guardando...';
+                        try {
+                            // Asegurar que la categoría "Ajuste" exista en masterCategories
+                            const today = new Date().toISOString().slice(0, 10);
+                            let categoriesChanged = false;
+                            if (!masterCategories.Ingreso) masterCategories.Ingreso = {};
+                            if (!masterCategories.Ingreso.Ajuste) {
+                                masterCategories.Ingreso.Ajuste = ['Ajuste de saldo'];
+                                categoriesChanged = true;
+                            } else if (!masterCategories.Ingreso.Ajuste.includes('Ajuste de saldo')) {
+                                masterCategories.Ingreso.Ajuste.push('Ajuste de saldo');
+                                categoriesChanged = true;
+                            }
+                            if (!masterCategories.Gasto) masterCategories.Gasto = {};
+                            if (!masterCategories.Gasto.Ajuste) {
+                                masterCategories.Gasto.Ajuste = ['Ajuste de saldo'];
+                                categoriesChanged = true;
+                            } else if (!masterCategories.Gasto.Ajuste.includes('Ajuste de saldo')) {
+                                masterCategories.Gasto.Ajuste.push('Ajuste de saldo');
+                                categoriesChanged = true;
+                            }
+                            if (categoriesChanged) {
+                                await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'categories'), { data: masterCategories });
+                            }
+
+                            const transactionsRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'transactions');
+                            for (const a of adjustments) {
+                                const isPositive = a.diff > 0;
+                                const tx = {
+                                    type: isPositive ? 'Ingreso' : 'Gasto',
+                                    category: 'Ajuste',
+                                    subcategory: 'Ajuste de saldo',
+                                    amount: Math.abs(a.diff).toFixed(2),
+                                    date: today,
+                                    paymentMethod: a.accountName,
+                                    destinationAccount: null,
+                                    detail: `Ajuste manual de saldo (de S/ ${a.current.toFixed(2)} a S/ ${a.target.toFixed(2)})`,
+                                    createdAt: serverTimestamp()
+                                };
+                                await addDoc(transactionsRef, tx);
+                            }
+
+                            // Guardar timestamp del ajuste para el cooldown de 30 días
+                            await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'meta'), { lastBalanceAdjust: serverTimestamp() }, { merge: true });
+
+                            modal.style.display = 'none';
+                            showAlert(`Se ${adjustments.length === 1 ? 'creó 1 ajuste' : 'crearon ' + adjustments.length + ' ajustes'} correctamente.\n\nPuedes ver ${adjustments.length === 1 ? 'el ajuste' : 'los ajustes'} en el Historial bajo la categoría "Ajuste".`);
+                        } catch (error) {
+                            console.error('Adjust error', error);
+                            showAlert("Error al crear los ajustes.");
+                        } finally {
+                            btnSubmit.disabled = false;
+                            btnSubmit.innerHTML = '<i data-lucide="save" class="w-4 h-4"></i> Guardar Saldos';
+                            if (typeof lucide !== 'undefined') lucide.createIcons();
+                        }
+                    });
                 };
             }
 
