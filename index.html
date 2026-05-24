@@ -6,7 +6,7 @@
     <title>Control de Presupuesto Personal</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐷</text></svg>">
 <!-- Content Security Policy: limita los orígenes desde donde el navegador acepta cargar scripts, estilos, conexiones, etc. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com https://*.cloudfunctions.net https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://generativelanguage.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; worker-src 'self' blob:">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://www.gstatic.com https://www.google.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://www.google.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com https://*.cloudfunctions.net https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://generativelanguage.googleapis.com https://recaptchaenterprise.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data:; frame-src 'self' https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; worker-src 'self' blob:">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
             integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
@@ -565,6 +565,7 @@
         const apiKey = ""; 
 
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
         import { getFirestore, collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, getDoc, setDoc, getDocs, updateDoc, writeBatch, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
         
@@ -605,6 +606,17 @@
             };
             
             const app = initializeApp(firebaseConfig);
+
+            // Inicializar Firebase App Check con reCAPTCHA Enterprise
+            try {
+                const appCheck = initializeAppCheck(app, {
+                    provider: new ReCaptchaEnterpriseProvider('6Le9ffosAAAAAOakZRtvTE-uxweL2AdeIut6wDQP'),
+                    isTokenAutoRefreshEnabled: true
+                });
+            } catch (appCheckError) {
+                console.warn('No se pudo inicializar App Check:', appCheckError);
+            }
+
             const auth = getAuth(app);
             const db = getFirestore(app);
             const appId = 'finanzaspersonales-1a966';
