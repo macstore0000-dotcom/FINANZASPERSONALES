@@ -112,7 +112,7 @@
                 <span>Estado del Sistema</span>
                 <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full font-bold flex items-center gap-1">
                     <span class="w-1.5 h-1.5 bg-green-500 rounded-full inline-block animate-pulse"></span>
-                    V2026.05.24.3 - Stable
+                    V2026.05.24.4 - Stable
                 </span>
             </div>
         </div>
@@ -639,6 +639,25 @@
             let globalMasterAccountsList = [];
             let isSubmitting = false;
             let isInitializingAccounts = false;
+
+            // Calcula el saldo actual de una cuenta usando saldo inicial + todas las transacciones (helper global)
+            function computeLiveBalance(accountName) {
+                const acc = (userAccounts || []).find(a => a.name === accountName);
+                if (!acc) return null;
+                let bal = parseFloat(acc.initialBalance || 0);
+                (allTransactions || []).forEach(t => {
+                    const amt = parseFloat(t.amount) || 0;
+                    if (t.type === 'Ingreso') {
+                        if (t.paymentMethod === accountName) bal += amt;
+                    } else if (t.type === 'Transferencia') {
+                        if (t.paymentMethod === accountName) bal -= amt;
+                        if (t.destinationAccount === accountName) bal += amt;
+                    } else {
+                        if (t.paymentMethod === accountName) bal -= amt;
+                    }
+                });
+                return bal;
+            }
 
             const loginView = document.getElementById('login-view');
             const appView = document.getElementById('app-view');
@@ -1883,25 +1902,6 @@ Por favor, redacta un análisis profesional con recomendaciones.`;
                     }
                 });
 
-                // Calcula el saldo actual de una cuenta usando saldo inicial + todas las transacciones
-                function computeLiveBalance(accountName) {
-                    const acc = (userAccounts || []).find(a => a.name === accountName);
-                    if (!acc) return null;
-                    let bal = parseFloat(acc.initialBalance || 0);
-                    (allTransactions || []).forEach(t => {
-                        const amt = parseFloat(t.amount) || 0;
-                        if (t.type === 'Ingreso') {
-                            if (t.paymentMethod === accountName) bal += amt;
-                        } else if (t.type === 'Transferencia') {
-                            if (t.paymentMethod === accountName) bal -= amt;
-                            if (t.destinationAccount === accountName) bal += amt;
-                        } else {
-                            if (t.paymentMethod === accountName) bal -= amt;
-                        }
-                    });
-                    return bal;
-                }
-
                 // Devuelve string con el mensaje de error si la operación NO es permitida; null si está OK.
                 function validateAccountBalance(accountName, amount) {
                     if (!accountName) return null;
@@ -2068,17 +2068,19 @@ Por favor, redacta un análisis profesional con recomendaciones.`;
                             const details = toDelete.map(d => {
                                 const accName = d.data().name;
                                 const txs = (allTransactions || []).filter(t => t.paymentMethod === accName || t.destinationAccount === accName).length;
-                                const bal = parseFloat(d.data().initialBalance || 0);
+                                const liveBal = computeLiveBalance(accName);
+                                const bal = liveBal === null ? 0 : liveBal;
                                 let extra = [];
                                 if (txs > 0) extra.push(`${txs} ${txs === 1 ? 'transacción' : 'transacciones'}`);
-                                if (bal !== 0) extra.push(`saldo inicial S/ ${bal.toFixed(2)}`);
+                                if (Math.abs(bal) >= 0.005) extra.push(`saldo actual S/ ${bal.toFixed(2)}`);
                                 return extra.length ? `• "${accName}" (${extra.join(', ')})` : `• "${accName}"`;
                             });
                             const anyWithData = toDelete.some(d => {
                                 const accName = d.data().name;
                                 const txs = (allTransactions || []).filter(t => t.paymentMethod === accName || t.destinationAccount === accName).length;
-                                const bal = parseFloat(d.data().initialBalance || 0);
-                                return txs > 0 || bal !== 0;
+                                const liveBal = computeLiveBalance(accName);
+                                const bal = liveBal === null ? 0 : liveBal;
+                                return txs > 0 || Math.abs(bal) >= 0.005;
                             });
                             warningParts.push(`Vas a ELIMINAR ${toDelete.length} ${toDelete.length === 1 ? 'cuenta' : 'cuentas'}:\n${details.join('\n')}`);
                             if (anyWithData) {
@@ -2366,19 +2368,19 @@ Por favor, redacta un análisis profesional con recomendaciones.`;
                 container.querySelectorAll('.admin-delete-account-btn').forEach(btn => btn.addEventListener('click', (e) => {
                     const { group, name } = e.target.dataset;
                     const txCount = (allTransactions || []).filter(t => t.paymentMethod === name || t.destinationAccount === name).length;
-                    const acct = (userAccounts || []).find(a => a.name === name);
-                    const initBal = acct ? parseFloat(acct.initialBalance || 0) : 0;
+                    const liveBal = computeLiveBalance(name);
+                    const liveBalNum = liveBal === null ? 0 : liveBal;
                     const doRemove = () => {
                         masterAccountsList = masterAccountsList.filter(a => !(a.name === name && a.group === group));
                         renderMasterAccountsPanel();
                     };
-                    if (txCount === 0 && initBal === 0) {
+                    if (txCount === 0 && Math.abs(liveBalNum) < 0.005) {
                         doRemove();
                     } else {
                         let msg = `La cuenta "${name}"`;
                         const parts = [];
                         if (txCount > 0) parts.push(`tiene ${txCount} ${txCount === 1 ? 'transacción asociada' : 'transacciones asociadas'}`);
-                        if (initBal !== 0) parts.push(`tiene saldo inicial de S/ ${initBal.toFixed(2)}`);
+                        if (Math.abs(liveBalNum) >= 0.005) parts.push(`tiene un saldo actual de S/ ${liveBalNum.toFixed(2)}`);
                         msg += ' ' + parts.join(' y ') + '. ';
                         msg += 'Si la eliminas, las transacciones asociadas seguirán visibles en el Historial pero NO se contarán en tu Patrimonio Neto ni en los dashboards por cuenta. Esta acción es difícil de revertir. Recuerda hacer clic en "Guardar Cambios" para que el cambio se aplique. ¿Continuar?';
                         showConfirmation(msg, doRemove);
