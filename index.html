@@ -552,7 +552,7 @@
     <div id="confirm-modal" class="modal">
         <div class="modal-content">
             <h3 id="confirm-title" class="text-lg font-bold mb-4">Confirmar Acción</h3>
-            <p id="confirm-message" class="mb-6">¿Estás seguro?</p>
+            <p id="confirm-message" class="mb-6 whitespace-pre-line text-left">¿Estás seguro?</p>
             <div class="flex justify-end gap-4">
                 <button id="confirm-cancel-btn" class="px-4 py-2 bg-gray-300 rounded-md hover:bg-gray-400">Cancelar</button>
                 <button id="confirm-ok-btn" class="px-4 py-2 text-white bg-red-600 rounded-md hover:bg-red-700">Confirmar</button>
@@ -1962,34 +1962,63 @@ Por favor, redacta un análisis profesional con recomendaciones.`;
                 document.getElementById('save-master-accounts-btn').addEventListener('click', async () => {
                     if (!currentUser) return;
                     try {
-                        await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'accounts'), { accounts: masterAccountsList });
-                        
                         const accountsRef = collection(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts');
                         const accountsSnap = await getDocs(accountsRef);
                         const masterNames = masterAccountsList.map(a => a.name);
                         const activeAccountNames = accountsSnap.docs.map(doc => doc.data().name);
-                        
-                        const batch = writeBatch(db);
-                        let hasChanges = false;
-                        
-                        accountsSnap.docs.forEach(docSnap => {
-                            if (!masterNames.includes(docSnap.data().name)) {
-                                batch.delete(docSnap.ref);
-                                hasChanges = true;
+
+                        const toDelete = accountsSnap.docs.filter(d => !masterNames.includes(d.data().name));
+                        const toAdd = masterAccountsList.filter(m => !activeAccountNames.includes(m.name));
+
+                        if (toDelete.length === 0 && toAdd.length === 0) {
+                            await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'accounts'), { accounts: masterAccountsList });
+                            showAlert("Tus cuentas base se actualizaron con éxito.");
+                            return;
+                        }
+
+                        let warningParts = [];
+                        if (toDelete.length > 0) {
+                            const details = toDelete.map(d => {
+                                const accName = d.data().name;
+                                const txs = (allTransactions || []).filter(t => t.paymentMethod === accName || t.destinationAccount === accName).length;
+                                const bal = parseFloat(d.data().initialBalance || 0);
+                                let extra = [];
+                                if (txs > 0) extra.push(`${txs} ${txs === 1 ? 'transacción' : 'transacciones'}`);
+                                if (bal !== 0) extra.push(`saldo inicial S/ ${bal.toFixed(2)}`);
+                                return extra.length ? `• "${accName}" (${extra.join(', ')})` : `• "${accName}"`;
+                            });
+                            const anyWithData = toDelete.some(d => {
+                                const accName = d.data().name;
+                                const txs = (allTransactions || []).filter(t => t.paymentMethod === accName || t.destinationAccount === accName).length;
+                                const bal = parseFloat(d.data().initialBalance || 0);
+                                return txs > 0 || bal !== 0;
+                            });
+                            warningParts.push(`Vas a ELIMINAR ${toDelete.length} ${toDelete.length === 1 ? 'cuenta' : 'cuentas'}:\n${details.join('\n')}`);
+                            if (anyWithData) {
+                                warningParts.push('Las transacciones asociadas seguirán visibles en el Historial pero NO se contarán en tu Patrimonio Neto ni en los dashboards por cuenta.');
+                            }
+                        }
+                        if (toAdd.length > 0) {
+                            warningParts.push(`Vas a CREAR ${toAdd.length} ${toAdd.length === 1 ? 'cuenta nueva' : 'cuentas nuevas'}: ${toAdd.map(a => '"' + a.name + '"').join(', ')}`);
+                        }
+
+                        const confirmMsg = warningParts.join('\n\n') + '\n\n¿Continuar?';
+
+                        showConfirmation(confirmMsg, async () => {
+                            try {
+                                await setDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'accounts'), { accounts: masterAccountsList });
+                                const batch = writeBatch(db);
+                                toDelete.forEach(docSnap => batch.delete(docSnap.ref));
+                                toAdd.forEach(masterAcc => {
+                                    const newDocRef = doc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts'));
+                                    batch.set(newDocRef, { ...masterAcc, initialBalance: 0, createdAt: serverTimestamp() });
+                                });
+                                await batch.commit();
+                                showAlert("Tus cuentas base se actualizaron con éxito.");
+                            } catch (error) {
+                                showAlert("No se pudieron guardar los cambios de cuentas.");
                             }
                         });
-
-                        masterAccountsList.forEach(masterAcc => {
-                            if (!activeAccountNames.includes(masterAcc.name)) {
-                                const newDocRef = doc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'accounts'));
-                                batch.set(newDocRef, { ...masterAcc, initialBalance: 0, createdAt: serverTimestamp() });
-                                hasChanges = true;
-                            }
-                        });
-                        
-                        if (hasChanges) await batch.commit();
-
-                        showAlert("Tus cuentas base se actualizaron con éxito.");
                     } catch (error) {
                         showAlert("No se pudieron guardar los cambios de cuentas.");
                     }
@@ -2136,8 +2165,19 @@ Por favor, redacta un análisis profesional con recomendaciones.`;
                     input.value = '';
                 }));
                 container.querySelectorAll('.admin-delete-subcategory-btn').forEach(btn => btn.addEventListener('click', (e) => {
-                    const { type, category, sub } = e.target.dataset, index = masterCategories[type][category].indexOf(sub);
-                    if (index > -1) { masterCategories[type][category].splice(index, 1); renderMasterCategoriesPanel(); }
+                    const { type, category, sub } = e.target.dataset;
+                    const index = masterCategories[type][category].indexOf(sub);
+                    if (index < 0) return;
+                    const txCount = (allTransactions || []).filter(t => t.subcategory === sub && t.category === category).length;
+                    const doRemove = () => { masterCategories[type][category].splice(index, 1); renderMasterCategoriesPanel(); };
+                    if (txCount === 0) {
+                        doRemove();
+                    } else {
+                        showConfirmation(
+                            `La subcategoría "${sub}" tiene ${txCount} ${txCount === 1 ? 'transacción asociada' : 'transacciones asociadas'}. Si la quitas de tu lista, esas transacciones seguirán visibles en el Historial pero no podrás registrar nuevas con ese nombre (a menos que la vuelvas a crear). Recuerda hacer clic en "Guardar Cambios" para que el cambio se aplique. ¿Continuar?`,
+                            doRemove
+                        );
+                    }
                 }));
             }
 
@@ -2182,8 +2222,24 @@ Por favor, redacta un análisis profesional con recomendaciones.`;
 
                 container.querySelectorAll('.admin-delete-account-btn').forEach(btn => btn.addEventListener('click', (e) => {
                     const { group, name } = e.target.dataset;
-                    masterAccountsList = masterAccountsList.filter(a => !(a.name === name && a.group === group));
-                    renderMasterAccountsPanel();
+                    const txCount = (allTransactions || []).filter(t => t.paymentMethod === name || t.destinationAccount === name).length;
+                    const acct = (userAccounts || []).find(a => a.name === name);
+                    const initBal = acct ? parseFloat(acct.initialBalance || 0) : 0;
+                    const doRemove = () => {
+                        masterAccountsList = masterAccountsList.filter(a => !(a.name === name && a.group === group));
+                        renderMasterAccountsPanel();
+                    };
+                    if (txCount === 0 && initBal === 0) {
+                        doRemove();
+                    } else {
+                        let msg = `La cuenta "${name}"`;
+                        const parts = [];
+                        if (txCount > 0) parts.push(`tiene ${txCount} ${txCount === 1 ? 'transacción asociada' : 'transacciones asociadas'}`);
+                        if (initBal !== 0) parts.push(`tiene saldo inicial de S/ ${initBal.toFixed(2)}`);
+                        msg += ' ' + parts.join(' y ') + '. ';
+                        msg += 'Si la eliminas, las transacciones asociadas seguirán visibles en el Historial pero NO se contarán en tu Patrimonio Neto ni en los dashboards por cuenta. Esta acción es difícil de revertir. Recuerda hacer clic en "Guardar Cambios" para que el cambio se aplique. ¿Continuar?';
+                        showConfirmation(msg, doRemove);
+                    }
                 }));
             }
 
