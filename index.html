@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Control de Presupuesto Personal</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐷</text></svg>">
+    <!-- PWA: manifest e íconos para instalación en celular y escritorio -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Finanzas">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
 <!-- Content Security Policy: limita los orígenes desde donde el navegador acepta cargar scripts, estilos, conexiones, etc. -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://www.gstatic.com https://www.google.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https://www.gstatic.com https://cdn.jsdelivr.net https://www.google.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com https://*.cloudfunctions.net https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://firebaseinstallations.googleapis.com https://generativelanguage.googleapis.com https://recaptchaenterprise.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data:; frame-src 'self' https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; worker-src 'self' blob:">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -585,6 +592,15 @@
             }
         });
         
+        // Registrar Service Worker para PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then((reg) => console.log('Service Worker registrado:', reg.scope))
+                    .catch((err) => console.warn('Service Worker no se pudo registrar:', err));
+            });
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
             
             function escapeHtml(unsafe) {
